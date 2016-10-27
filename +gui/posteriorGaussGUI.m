@@ -1,4 +1,47 @@
-function posteriorGaussGUI(varargin)
+function posteriorGaussGUI(dsObject, save1, save2)
+    % posteriorGaussGUI(dsObject, save1, save2)
+    % compare (2D) posteriors between Ground truth, Filter and Smoother for
+    % 2 different saved results
+    %
+    % INPUTS:
+    % dsObject - a dynamicalSystems object
+    % save1    - a save point. If numeric, the relevant index is retrieved
+    %            from the object stack. If character, the save point with
+    %            matching description is retrieved. If empty, the current
+    %            parameters are used.
+    % save2    - the comparison point (acceptable values as above).
+    
+    assert(nargin == 3, 'Valid call is posteriorGaussGUI(dsObject, save1, save2)');
     addpath(utils.system.matlabPath('dynamicalSystems','guide'));
-    guidePosteriorGaussGUI(varargin{:});
+    
+    [sp1, descr1] = getSavePoint(dsObject, save1);
+    [sp2, descr2] = getSavePoint(dsObject, save2);
+    sp1.descr = descr1;
+    sp2.descr = descr2;
+    guidePosteriorGaussGUI(dsObject, sp1, sp2);
+end
+
+        
+function [out, descr] = getSavePoint(dso, sp)
+    if isempty(sp)
+        try
+            dso      = dso.save(['current-', char(floor(75*rand(1, 4)) + 48)]);
+        catch ME
+            fprintf('Error trying to retrieve current status as save point:\n');
+            rethrow(ME);
+        end
+        [out, descr]     = dso.stackTop;
+    elseif isnumeric(sp) && isscalar(sp)
+        assert(sp <= dso.stackptr, 'save point requested exceeds the save stack')
+        out      = dso.stack{sp, 1};
+        descr    = dso.stack{sp, 2};
+    elseif ischar(sp)
+        descr    = dso.getStackDescrList;
+        spfind   = find(strcmpi(sp, descr));
+        assert(~isempty(spfind), 'Cannot find save-point ''%s'' on save stack', sp);
+        out      = dso.stack{spfind, 1};
+        descr    = dso.stack{spfind, 2};
+    else
+        error('unknown save-point type. Expected scalar-numeric, character or empty');
+    end
 end

@@ -43,8 +43,8 @@ llh        = [-Inf; zeros(opts.maxiter,1)];
 % prevParams = getAllParams(obj);
 
 for ii = 1:opts.maxiter
-    obj    = obj.posteriorFilter(true, false);
-    obj    = obj.posteriorSmooth;
+    obj    = obj.filterKalman(true, false);
+    obj    = obj.smoothLinear;
 
     llh(ii+1) = obj.llh;
     delta     = llh(ii+1) - llh(ii);
@@ -52,13 +52,18 @@ for ii = 1:opts.maxiter
         fprintf('(%s) EM Converged in %d iterations (%.4f) \n', datestr(now), ii, delta);
         break
     end
-    obj       = obj.parameterLearningMStep;
+%     obj       = obj.parameterLearningMStep;
+    obj       = obj.parameterLearningMStep([], {'A', 'Q'});
+    obj       = obj.filterKalman;
+    obj       = obj.smoothLinear;
+    obj       = obj.parameterLearningMStep([], {'H', 'R'});
     
     if opts.verbose
         fprintf('--- (%s) Iteration %4d: LLH change: % .2f\n', ...
             datestr(now, 'HH:MM:SS'), ii, delta);
     end
 end
+llh = llh(2:ii+1);
 end
 
 function out = getAllParams(s)

@@ -61,28 +61,31 @@ end
 
 dsobj = varargin{1};
 assert(isa(dsobj, 'dynamicalSystem'), 'input is not a dynamicalSystems object!');
-if ~isfield(dsobj.posterior, 'smooth')
-    fprintf('(%s) --- Not all posteriors have been run for input. Running...\n', datestr(now, 'HH:MM:SS'));
-    dsobj = dsobj.posteriorSmooth;
-    fprintf('(%s) --- Complete...\n\n', datestr(now, 'HH:MM:SS'));
-end
+sp1   = varargin{2};
+sp2   = varargin{3};
 
 handles.dsObj = dsobj;
-
+handles.sp    = {sp1, sp2};
 % series:
 %    0 - Ground truth
 %    1 - Filter
 %    2 - Smooth
 handles.showEmission = true;
 handles.pSeries1     = 0;
-handles.pOrigF1      = 1;
+handles.sp2_1        = 0;
 handles.pSeries2     = 1;
-handles.pOrigF2   = 1;
+handles.sp2_2        = 0;
 
 handles.doLC1        = 1;
 handles.doLC2        = 1;
 handles.lcAlpha      = 1;   % standard dev. of level curve plotted for Gaussian
 doPlot(hObject, eventdata, handles);
+
+handles.popupS1.String = {'Ground Truth', [sp1.descr, '::filter'], [sp1.descr, '::smooth'], ...
+    [sp2.descr, '::filter'], [sp2.descr, '::smooth']};
+handles.popupS2.String = {'Ground Truth', [sp1.descr, '::filter'], [sp1.descr, '::smooth'], ...
+    [sp2.descr, '::filter'], [sp2.descr, '::smooth']};
+handles.popupS2.Value = 1 + (handles.pSeries2 + 0) + handles.sp2_1*2;
 
 % Update handles structure
 guidata(hObject, handles);
@@ -93,13 +96,12 @@ guidata(hObject, handles);
 function popupS1_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
-    set(hObject, 'Value', handles.pSeries1 + 1 + handles.pOrigF1*2);
 end
 
 function popupS2_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
-    set(hObject, 'Value', handles.pSeries2 + 1 + handles.pOrigF2*2);
+    set(hObject, 'Value', handles.pSeries2 + 1 + handles.sp2_2*2);
 end
 
 function editLvlSD_CreateFcn(hObject, eventdata, handles)
@@ -128,10 +130,10 @@ function popupS1_Callback(hObject, eventdata, handles)
 contents = cellstr(get(hObject,'String'));
 inpVal   = get(hObject,'Value');
 if inpVal > 3
-    handles.pOrigF1 = 1;
+    handles.sp2_1 = 1;
     inpVal = inpVal - 2;
 else
-    handles.pOrigF1 = 0;
+    handles.sp2_1 = 0;
 end
 handles.pSeries1 = inpVal - 1;
 doPlot(hObject, eventdata, handles);
@@ -150,10 +152,10 @@ function popupS2_Callback(hObject, eventdata, handles)
 contents = cellstr(get(hObject,'String'));
 inpVal   = get(hObject,'Value');
 if inpVal > 3
-    handles.pOrigF2 = 1;
+    handles.sp2_2 = 1;
     inpVal = inpVal - 2;
 else
-    handles.pOrigF2 = 0;
+    handles.sp2_2 = 0;
 end
 handles.pSeries2 = inpVal - 1;
 doPlot(hObject, eventdata, handles);
@@ -209,14 +211,14 @@ if handles.pSeries1 == 0 || handles.pSeries2 == 0
 end
 
 
-doPlotInner(handles.pSeries1, handles.pOrigF1, handles, col1, handles.doLC1);
-doPlotInner(handles.pSeries2, handles.pOrigF2, handles, col2, handles.doLC2);
+doPlotInner(handles.pSeries1, 1-handles.sp2_1, handles, col1, handles.doLC1);
+doPlotInner(handles.pSeries2, 1-handles.sp2_2, handles, col2, handles.doLC2);
 % 
 % if handles.pSeries1 == 1 || handles.pSeries2 == 1
 %     cSeries   = (handles.pSeries2 == 1) + 1;
 %     col       = col1;
 %     if cSeries == 2; col = col2; end
-%     if cSeries == 1 && handles.pOrigF1 || cSeries == 2 && handles.pOrigF2
+%     if cSeries == 1 && handles.sp2_1 || cSeries == 2 && handles.sp2_2
 %         fMu    = handles.dsObj.posterior.inFilter.mu;
 %         fSigma = handles.dsObj.posterior.inFilter.sigma;
 %     else
@@ -225,7 +227,7 @@ doPlotInner(handles.pSeries2, handles.pOrigF2, handles, col2, handles.doLC2);
 %     end
 %     
 %     if (cSeries==1 && handles.doLC1) || (cSeries==2 && handles.doLC2)
-%         for tt=1:handles.dsObj.T
+%         for tt=1:handles.dsObj.d.T
 %             plot(handles.axes1, fMu(1,tt), fMu(2,tt), '+', 'Color', col);
 %             lc  = utils.plot.gaussian2DLevelCurve(handles.lcAlpha, fMu(:,tt), fSigma{tt}, 100);
 %             plot(handles.axes1, lc(:,1), lc(:,2), '-', 'Color', col);
@@ -240,7 +242,7 @@ doPlotInner(handles.pSeries2, handles.pOrigF2, handles, col2, handles.doLC2);
 %     cSeries   = (handles.pSeries2 == 2) + 1;
 %     col       = col1;
 %     if cSeries == 2; col = col2; end
-%     if cSeries == 1 && handles.pOrigF1 || cSeries == 2 && handles.pOrigF2
+%     if cSeries == 1 && handles.sp2_1 || cSeries == 2 && handles.sp2_2
 %         fMu    = handles.dsObj.posterior.inSmooth.mu;
 %         fSigma = handles.dsObj.posterior.inSmooth.sigma;
 %     else
@@ -249,7 +251,7 @@ doPlotInner(handles.pSeries2, handles.pOrigF2, handles, col2, handles.doLC2);
 %     end
 %     
 %     if (cSeries==1 && handles.doLC1) || (cSeries==2 && handles.doLC2)
-%         for tt=1:handles.dsObj.T
+%         for tt=1:handles.dsObj.d.T
 %             plot(handles.axes1, fMu(1,tt), fMu(2,tt), '+', 'Color', col);
 %             lc  = utils.plot.gaussian2DLevelCurve(handles.lcAlpha, fMu(:,tt), fSigma{tt}, 100);
 %             plot(handles.axes1, lc(:,1), lc(:,2), '-', 'Color', col);
@@ -261,29 +263,29 @@ doPlotInner(handles.pSeries2, handles.pOrigF2, handles, col2, handles.doLC2);
 % end
 hold(handles.axes1, 'off');
 
-function doPlotInner(type, bOrig, handles, col, doLC)
+function doPlotInner(type, doSP1, handles, col, doLC)
 
     if type == 0 
         plot(handles.axes1, handles.dsObj.x(1,:), handles.dsObj.x(2,:), '*-', 'Color', col);
         return
     end
     
-    if type == 1 && bOrig
-        mu      = handles.dsObj.posterior.inFilter.mu;
-        sigma   = handles.dsObj.posterior.inFilter.sigma;
-    elseif type == 1 && ~bOrig
-        mu      = handles.dsObj.posterior.filter.mu;
-        sigma   = handles.dsObj.posterior.filter.sigma;
-    elseif type == 2 && bOrig
-        mu      = handles.dsObj.posterior.inSmooth.mu;
-        sigma   = handles.dsObj.posterior.inSmooth.sigma;
-    elseif type == 2 && ~bOrig
-        mu      = handles.dsObj.posterior.smooth.mu;
-        sigma   = handles.dsObj.posterior.smooth.sigma;
+    if type == 1 && doSP1
+        mu      = handles.sp{1}.filter.mu;
+        sigma   = handles.sp{1}.filter.sigma;
+    elseif type == 1 && ~doSP1
+        mu      = handles.sp{2}.filter.mu;
+        sigma   = handles.sp{2}.filter.sigma;
+    elseif type == 2 && doSP1
+        mu      = handles.sp{1}.smooth.mu;
+        sigma   = handles.sp{1}.smooth.sigma;
+    elseif type == 2 && ~doSP1
+        mu      = handles.sp{2}.smooth.mu;
+        sigma   = handles.sp{2}.smooth.sigma;
     end
     
     if doLC
-        for tt=1:handles.dsObj.T
+        for tt=1:handles.dsObj.d.T
             plot(handles.axes1, mu(1,tt), mu(2,tt), '+', 'Color', col);
             lc  = utils.plot.gaussian2DLevelCurve(handles.lcAlpha, mu(:,tt), sigma{tt}, 100);
             plot(handles.axes1, lc(:,1), lc(:,2), '-', 'Color', col);
@@ -323,11 +325,11 @@ switch eventdata.Key
         handles.pSeries2 = 0;
     case 's'
         handles.pSeries2 = 2;
-    case 'o'
-        handles.pOrigF2 = 1;
-    case 'l'
-        handles.pOrigF2 = 0;
+    case 'e'
+        handles.sp2_2 = 1;
+    case 'd'
+        handles.sp2_2 = 0;
 end
-set(hObject, 'Value', handles.pSeries2 + 1 + handles.pOrigF2*2);
+set(hObject, 'Value', handles.pSeries2 + 1 + handles.sp2_2*2);
 doPlot(hObject, eventdata, handles);
 guidata(hObject, handles);

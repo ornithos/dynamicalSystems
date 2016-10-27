@@ -1,17 +1,19 @@
-function obj = posteriorFilter(obj, bDoLLH, bDoValidation)
+function obj = filterKalman(obj, bDoLLH, bDoValidation)
    
-    % obj = obj.posteriorFilter
+    % obj = obj.filterKalman
     % Perform posterior inference on each hidden state in the dynamical
-    % system. This is the Kalman Filter updates / forward equations.
-    % Method of object type 'dynamicalSystem'.
+    % system. This is the Kalman Filter updates / forward equations for
+    % linear dynamics. Method of object type 'dynamicalSystem'.
     %
-    % obj = obj.posteriorFilter(false)
+    % obj = obj.filterKalman(true)
+    % As above, but returns Log Likelihood.
+    %
+    % obj = obj.filterKalman([], false)
     % As above, but performs no input validation.
     %
     % OUTPUT:
     %  Returns object of type 'dynamicalSystem' with property
-    %  posterior.filter as cell of means and variances of marginal
-    %  posterior.
+    %  filter as cell of means and variances of marginal posterior.
     
     if nargin <3 || isempty(bDoValidation)
         bDoValidation = true;
@@ -28,15 +30,15 @@ function obj = posteriorFilter(obj, bDoLLH, bDoValidation)
         obj.validationInference;
     end
     
-    filterMu        = zeros(obj.d.x, obj.T);
-    filterSigma     = cell(obj.T, 1);
+    filterMu        = zeros(obj.d.x, obj.d.T);
+    filterSigma     = cell(obj.d.T, 1);
     % initialise t-1 = 0 values to prior
     m               = obj.x0.mu;
     P               = obj.x0.sigma;
     d               = obj.d.y;
     
     % main forward step loop
-    for tt = 1:obj.T
+    for tt = 1:obj.d.T
         m_minus         = obj.A * m;
         P_minus         = obj.A * P * obj.A' + obj.Q;
 
@@ -46,7 +48,7 @@ function obj = posteriorFilter(obj, bDoLLH, bDoValidation)
         m               = m_minus + K * (obj.y(:,tt) - obj.H * m_minus);
         P               = P_minus - K * S * K';
         
-        if false && tt > obj.T - 5
+        if false && tt > obj.d.T - 5
             fprintf('%8f ', det(P));
         end
         if bDoLLH
@@ -58,8 +60,9 @@ function obj = posteriorFilter(obj, bDoLLH, bDoValidation)
         filterSigma{tt} = P;
     end
     
-    obj.posterior.filter.mu    = filterMu;
-    obj.posterior.filter.sigma = filterSigma;
+    obj.filter.mu    = filterMu;
+    obj.filter.sigma = filterSigma;
     if bDoLLH; obj.llh = llh; end;
     
+    obj.fpHash     = obj.parameterHash;
 end

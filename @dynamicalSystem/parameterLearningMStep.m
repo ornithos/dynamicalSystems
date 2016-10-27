@@ -1,23 +1,35 @@
-function obj = parameterLearningMStep(obj)
+function obj = parameterLearningMStep(obj, verbose, updateOnly)
 % parameterLearningMStep(obj)
 % M-Step of the EM algorithm: maximise likelihood of parameters given the
 % current estimate of the latent state x.
 % This follows the algorithm in Särkkä.
 % The updates are exact and analytic: no iteration is required.
 
+if nargin < 3
+    updateOnly = [];
+end
+
+if nargin < 2 || isempty(verbose)
+    verbose = false;
+end
 
 % Check for existence of Smoothed estimates
-if ~isfield(obj.posterior, 'smooth') || numel(obj.posterior.smooth.sigma) ~= obj.T
+if ~isfield(obj.smooth, 'sigma') || numel(obj.smooth.sigma) ~= obj.d.T
     fprintf('Smoothed estimates not found or incorrect format. Rerunning smoother...\n');
-    obj = obj.posteriorFilter(false, false);
+    obj = obj.filterKalman(false, false);
+    obj = obj.smoothLinear(false, false);
+elseif obj.fpHash ~= obj.parameterHash
+    fprintf('Parameter values changed since last filter. Rerunning filter...\n');
+    obj = obj.filterKalman(false, false);
+    obj = obj.smoothLinear(false, false);
 end
 
 % concatenate with x0 to provide estimates of x from 0 to T
-mu    = [obj.posterior.smooth.x0.mu, obj.posterior.smooth.mu];
-sigma = vertcat(obj.posterior.smooth.x0.sigma, obj.posterior.smooth.sigma);
-G     = vertcat(obj.posterior.smooth.x0.G, obj.posterior.smooth.G);
+mu    = [obj.smooth.x0.mu, obj.smooth.mu];
+sigma = vertcat(obj.smooth.x0.sigma, obj.smooth.sigma);
+G     = vertcat(obj.smooth.x0.G, obj.smooth.G);
 y     = obj.y;
-T     = obj.T;
+T     = obj.d.T;
 
 % mu    indexes from 0:T     (T+1 elements)
 % sigma indexes from 0:T     (T+1 elements)
@@ -43,20 +55,50 @@ end
 C     = C./T;
 
 % Parameter updates
-verbose = false;
-if verbose; prevLLH = obj.posteriorFilter(true); end
-if verbose; prevLLH  = prevLLH.llh; end
-obj.A   = C / PHI;
-if verbose; curLLH = obj.posteriorFilter(true); fprintf('M-Step: ''A'' --- Change in LLH: % 5.3f\n', curLLH.llh - prevLLH); prevLLH = curLLH.llh; end
-obj.Q   = SIGMA - C*A' - A*C' + A*PHI*A';
-obj.Q   = (obj.Q + obj.Q')./2;
-if verbose; curLLH = obj.posteriorFilter(true); fprintf('M-Step: ''Q'' --- Change in LLH: % 5.3f\n', curLLH.llh - prevLLH); prevLLH = curLLH.llh; end
-obj.H   = B / SIGMA;
-if verbose; curLLH = obj.posteriorFilter(true); fprintf('M-Step: ''H'' --- Change in LLH: % 5.3f\n', curLLH.llh - prevLLH); prevLLH = curLLH.llh; end
-obj.R   = D - H*B' - B*H' + H*SIGMA*H';
-obj.R   = (obj.R + obj.R')./2;
-if verbose; curLLH = obj.posteriorFilter(true); fprintf('M-Step: ''R'' --- Change in LLH: % 5.3f\n', curLLH.llh - prevLLH); prevLLH = curLLH.llh; end
+if isempty(updateOnly)
+    if verbose; prevLLH = obj.filterKalman(true); prevLLH  = prevLLH.llh; end
+    
+    % A and Q updates
+    A       = C / PHI;
+    if verbose; curLLH = obj.filterKalman(true); fprintf('M-Step: ''A'' --- Change in LLH: % 5.3f\n', curLLH.llh - prevLLH); prevLLH = curLLH.llh; end
+    Q       = SIGMA - C*A' - A*C' + A*PHI*A';
+    obj.A   = A;
+    obj.Q   = (Q + Q')./2;
+    if norm(Q - obj.Q)/obj.d.x^2 > 1e-4; warning('Q is not symmetric (%.5f)\n', norm(Q - obj.Q)/obj.d.x^2); end
+    if verbose; curLLH = obj.filterKalman(true); fprintf('M-Step: ''Q'' --- Change in LLH: % 5.3f\n', curLLH.llh - prevLLH); prevLLH = curLLH.llh; end
+    
+    % H and R updates
+    H       = B / SIGMA;
+    if verbose; curLLH = obj.filterKalman(true); fprintf('M-Step: ''H'' --- Change in LLH: % 5.3f\n', curLLH.llh - prevLLH); prevLLH = curLLH.llh; end
+    R       = D - H*B' - B*H' + H*SIGMA*H';
+    obj.H   = H;
+    obj.R   = (R + R')./2;
+    if norm(R - obj.R)/obj.d.y^2 > 1e-4; warning('R is not symmetric (%.5f)\n', norm(R - obj.R)/obj.d.y^2); end
+    if verbose; curLLH = obj.filterKalman(true); fprintf('M-Step: ''R'' --- Change in LLH: % 5.3f\n', curLLH.llh - prevLLH); prevLLH = curLLH.llh; end
 
+else
+    if verbose; warning('verbose not available when selecting particular M-step updates'); end
+    if any(strcmpi(updateOnly, {'A','Q'}))
+        A = C / PHI;
+        if any(strcmpi(updateOnly, 'A'))
+            obj.A = A;
+        end
+        if any(strcmpi(updateOnly, 'Q'))
+            Q       = SIGMA - C*A' - A*C' + A*PHI*A';
+            obj.Q   = (Q + Q')./2;
+        end
+    end
+    
+    if any(strcmpi(updateOnly, {'H', 'R'}))
+        H       = B / SIGMA;
+        if any(strcmpi(updateOnly, 'H'))
+            obj.H = H;
+        end
+        if any(strcmpi(updateOnly, 'R'))
+            R       = D - H*B' - B*H' + H*SIGMA*H';
+            obj.R   = (R + R')./2;
+        end
+    end
 end
 
 

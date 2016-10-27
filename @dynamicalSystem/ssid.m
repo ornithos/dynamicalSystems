@@ -3,7 +3,7 @@ function obj = ssid(obj, L)
     % dimension of input vectors
     d       = obj.d.y;
     n       = obj.d.x;
-    rows    = obj.T - L + 1;
+    rows    = obj.d.T - L + 1;
     Y       = zeros(d .* rows, L);
     
     % Create Hankel matrix

@@ -1,106 +1,98 @@
 classdef dynamicalSystem
+   % dynamicalSystem: create linear/non-linear dynamical system object with
+   % access to filtering, smoothing and learning methods, and visualisations
+   % for comparison of methods.
+   %
+   % dynamicalSystem(dimx, dimy, 'evolution', {A || f || []}, {Df, Q}
+   %                 'emission', {H || h || []}, {Dh, R},
+   %                 'data', {y || T}, 'x0' {x0mu, x0cov}, opts)
+   %
+   % The string arguments can be redistributed as desired, but we assume
+   % that they appear in this order for documentation. 
+   %
+   % dimx - dimension of latent (evolutionary) state.
+   % dimy - dimension of output observation (emission).
+   %
+   % *** EVOLUTION ***
+   % - the first argument is either the (linear) transition matrix, a (non-
+   % linear) function handle f, or an empty vector. The empty vector is
+   % interpreted as an unknown linear matrix which must be learned.
+   % - a couple of optional arguments. Df = the derivative (Hessian) of f,
+   % the evolution noise covariance Q (can be learned if not specified).
+   %
+   % *** EMISSION ***
+   % - the first argument is the same as that of the evolution parameters,
+   % corresponding to the emission linear/nonlinear function.
+   % - a couple of optional arguments. Dh = the derivative (Hessian) of h,
+   % the emission noise covariance R (can be learned if not specified).
+   %
+   % *** DATA ***
+   % - either a data matrix y corresponding to the observed data (each
+   % column is an observation) at time 1, ..., t; or the number of
+   % observations that should be generated from the given dynamics. The
+   % latter may only be specified if all transitions and covariances have
+   % also been specified.
+   %
+   % % ***** x0 *****
+   % - x0mu: the mean of the prior over the latent space (if not given
+   % assumed 0)
+   % - x0cov: the covariance of the prior over the latent space (required).
+   %
+   % *** OPTS ***
+   % - A struct containing fields: warnings, verbose
+   
    properties
-      x, y, A, H, Q, R, x0, posterior=struct, d
+      x, y, f, Df, h, Dh, x0, stack = cell(100,2), d
    end
    properties (SetAccess = protected)
-       inA = []
-       inH = []
-       inQ = []
-       inR = []
-       T = []
        opts = []
-       hasOpts = false
-       llh = [];
+       evoLinear = []
+       evoNLhasParams = false
+       emiLinear = []
+       emiNLhasParams = false
+       stackptr = 0
+       % ----------------- Changeable:
+       A = []
+       H = []
+       Q = []
+       R = []
+       llh = []
+       evoNLParams = struct
+       emiNLParams = struct
+       filter = []
+       fpHash = []
+       smooth = []
    end
    methods
-      function obj = dynamicalSystem(x0, varargin)
-         nargs = length(varargin);
+      function obj = dynamicalSystem(varargin)
+         % CONSTRUCTOR
+         obj = obj.processInputArgs(varargin);
          
-         % find opts object (if any)
-         for ii = 1:nargs
-             if isa(varargin{ii}, 'dsOpts')
-                 obj.opts = varargin{ii};
-                 obj.hasOpts = true;
-                 varargin(ii) = [];
-                 nargs = nargs - 1;
+         % pre populate filter/smoother for input data
+         if obj.validationInference(false)
+             fprintf('(%s) Running smoother for input parameters...  ', datestr(now, 'HH:MM:SS'));
+             obj = obj.filterKalman;
+             obj = obj.smoothLinear;
+             fprintf('Complete!\n');
+             obj = obj.save('initialised-run');
+         else
+             if obj.opts.warnings
+                 warning('dynamicalSystem cannot perform initial inference since not all parameters specified.');
              end
          end
-                 
-         switch nargs
-             case 2
-                 % input data and dimension of latent space.
-                 assert(obj.isnummat(varargin{1}), 'prototype (y, d): argument one must be a numeric matrix');
-                 assert(obj.isnumscal(varargin{2}), 'prototype (y, d): argument two must be a numeric scalar');
-                 obj.y = varargin{1};
-                 obj.d = struct('x', varargin{2}, 'y', size(obj.y, 2));
-                 
-                 obj   = obj.processX0(x0);
-                 
-                 if ~(obj.hasOpts && ~obj.opts.warnings)
-                     if size(obj.y,1) > obj.d.y
-                         warning('more dimensions in observations than timepoints. y is (d x T) matrix.');
-                     end
-                     if obj.d.y < obj.d.x
-                         warning('latent space dimensionality is greater than input space!')
-                     end
-                 end
-                 
-             case {5,6}
-                 % all system matrices
-                 assert(obj.isnummat(varargin{1}), 'prototype (A, H, Q, R, [T/y]): argument 1 must be a numeric matrix');
-                 assert(obj.isnummat(varargin{2}), 'prototype (A, H, Q, R, [T/y]): argument 2 must be a numeric matrix');
-                 assert(obj.isnummat(varargin{3}), 'prototype (A, H, Q, R, [T/y]): argument 3 must be a numeric matrix');
-                 assert(obj.isnummat(varargin{4}), 'prototype (A, H, Q, R, [T/y]): argument 4 must be a numeric matrix');
-                 obj.inA = varargin{1};
-                 obj.inH = varargin{2};
-                 obj.inQ = varargin{3};
-                 obj.inR = varargin{4};
-                 obj.d = struct('x', size(obj.inA,1), 'y', size(obj.inH, 1));
-                 assert(all(size(obj.inA)==[obj.d.x, obj.d.x]), 'matrix A is not square');
-                 assert(all(size(obj.inQ)==[obj.d.x, obj.d.x]), 'matrix Q is not d.x by d.x');
-                 assert(all(size(obj.inH)==[obj.d.y, obj.d.x]), 'matrix H is not d.y by d.x');
-                 assert(all(size(obj.inR)==[obj.d.y, obj.d.y]), 'matrix R is not d.y by d.y');
-                 obj = obj.processX0(x0);
-                 
-                 if obj.isnumscal(varargin{5})
-                     obj.T = varargin{5};
-                     obj   = obj.generateData;
-                 else
-                     assert(obj.isnummat(varargin{5}), 'prototype (A, H, Q, R, [T/y]): argument 5 must be a numeric scalar or matrix');
-                     obj.y = varargin{5};
-                     obj.T = size(obj.y, 2);
-                     if ~(obj.hasOpts && ~obj.opts.warnings)
-                         if size(obj.y,1) > obj.d.y
-                             warning('more dimensions in observations than timepoints. y is (d x T) matrix.');
-                         end
-                     end
-                 end
-                 
-             otherwise
-                 error('Number of arguments (%d) does not match any prototype format!', nargs);
-             
-         end
-         % pre populate filter/smoother for input data
-         fprintf('(%s) Running smoother for input parameters...  ', datestr(now, 'HH:MM:SS'));
-         obj = obj.useInputParameters;
-         obj = obj.posteriorFilter;
-         obj = obj.posteriorSmooth;
-         obj.posterior.inFilter = obj.posterior.filter;
-         obj.posterior.inSmooth = obj.posterior.smooth;
-         fprintf('Complete!\n');
-         obj = obj.clearParameters;
+         
       end
       
       function obj = generateData(obj)
-          obj.x       = zeros(obj.d.x, obj.T+1);
-          obj.y       = zeros(obj.d.y, obj.T);
+          obj.x       = zeros(obj.d.x, obj.d.T+1);
+          obj.y       = zeros(obj.d.y, obj.d.T);
           obj.x(:,1)  = obj.x0.mu;
           
-          transChol   = chol(obj.inQ);
-          emissChol   = chol(obj.inR);
-          for tt = 1:obj.T
-              obj.x(:,tt+1) = obj.inA * obj.x(:,tt) + transChol * randn(obj.d.x,1);
-              obj.y(:,tt)   = obj.inH * obj.x(:,tt+1) + emissChol * randn(obj.d.y, 1);
+          transChol   = chol(obj.Q);
+          emissChol   = chol(obj.R);
+          for tt = 1:obj.d.T
+              obj.x(:,tt+1) = obj.doTransition(obj.x(:,tt)) + transChol * randn(obj.d.x,1);
+              obj.y(:,tt)   = obj.doEmission(obj.x(:,tt+1)) + emissChol * randn(obj.d.y,1);
           end
           obj.x       = obj.x(:,2:end);
       end
@@ -113,36 +105,124 @@ classdef dynamicalSystem
           obj.R = obj.inR;
       end
       
-      % prototypes
-      obj = posteriorFilter(obj, bDoLLH, bDoValidation); % Kalman Filter
-      obj = posteriorSmooth(obj, bDoValidation); % RTS Smoother
-      obj = validationInference(obj); % Input validation
+      
+      % ---- Save stack handlers -----------------------
+      function obj = stackPush(obj, insertion, descr)
+          maxIdx = size(obj.stack, 1);
+          if obj.stackptr >= maxIdx
+              obj.stack = [obj.stack; cell(100,2)];
+          end
+          if any(strcmpi(descr, obj.getStackDescrList))
+              error('Name is not unique. Please choose a different name');
+          end
+          obj.stackptr = obj.stackptr + 1;
+          obj.stack{obj.stackptr,1} = insertion;
+          obj.stack{obj.stackptr,2} = descr;
+      end
+        
+      function obj = stackDelete(obj)
+          if obj.stackptr <= 0
+              fprintf('Empty save stack. Nothing to do.\n');
+              return;
+          end
+          maxIdx = size(obj.stack, 1);
+          obj.stack(obj.stackptr,:) = {[],[]};
+          obj.stackptr = obj.stackptr - 1;
+            
+          if obj.stackptr < maxIdx - 150
+              obj.stack = obj.stack(1:(maxIdx - 100),:);
+          end
+      end
+        
+      function [contents, descr] = stackTop(obj)
+          if obj.stackptr <= 0
+              fprintf('Empty save stack. \n');
+              contents = []; descr = []; return
+          end
+          contents = obj.stack{obj.stackptr,1};
+          descr    = obj.stack{obj.stackptr,2};
+      end
+       
+      function descr = getStackDescrList(obj)
+          if obj.stackptr == 0
+              descr = {}; return
+          end
+          descr = obj.stack(1:obj.stackptr,2);
+      end
+      % ------------------------------------------------
+        
+      % ----- save / stack aliases ------------------------
+      function obj = save(obj, descr)
+          assert(nargin == 2, 'please provide a description');
+          if obj.fpHash ~= obj.parameterHash
+              if obj.opts.warnings; warning('posterior does not match current parameters'); end
+              if obj.evoLinear && obj.emiLinear
+                  fprintf('(%s) Running posterior...\n', datestr(now, 'HH:MM:SS'));
+                  obj = obj.filterKalman;
+                  obj = obj.smoothLinear;
+              else
+                  error('Unable to save: posterior does not match parameters. Please run a posterior algm');
+              end
+          end
+          
+          insertion = struct;
+          insertion.A = obj.A;
+          insertion.H = obj.H;
+          insertion.Q = obj.Q;
+          insertion.R = obj.R;
+          insertion.llh = obj.llh;
+          insertion.evoNLParams = obj.evoNLParams;
+          insertion.emiNLParams = obj.emiNLParams;
+          insertion.filter = obj.filter;
+          insertion.smooth = obj.smooth;
+          insertion.fpHash = obj.fpHash;
+          obj = stackPush(obj, insertion, descr);
+      end
+      function descr = savedList(obj)
+          descr = strjoin(obj.getStackDescrList, ',\n');
+      end
+      
+      % --- prototypes -------------------
+      % inference / learning 
+      obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
+      obj = smoothLinear(obj, bDoValidation); % RTS Smoother
+      obj = validationInference(obj, doError); % Input validation
       obj = ssid(obj, L);  % Subspace ID
       [obj, llh] = parameterLearningEM(obj, opts);
-      obj = parameterLearningMStep(obj, opts);
+      obj = parameterLearningMStep(obj, verbose, updateOnly);
       obj = calcLogLikelihood(obj);
       
+      % graphical
       plotStep2D(obj, posteriorType)
    end
    
    methods (Access = private)
-       function obj = processX0(obj, x0)
-       % process x0 object
-         if isempty(x0)
-             obj.x0 = struct('mu', zeros(obj.d.x,1), 'sigma', eye(obj.d.x)*1e9);
-         else
-             assert(isstruct(x0) && all(ismember(fieldnames(x0), {'mu','sigma'})), ...
-                 'x0 must be a struct with fields ''mu'' and ''sigma''');
-             obj.x0 = x0;
-         end
-       end
-       
-       function obj = clearParameters(obj)
-           obj.A = [];
-           obj.H = [];
-           obj.Q = [];
-           obj.R = [];
-       end
+
+       % ---- Dynamics wrappers --------------------------
+        function out = doTransition(obj, input)
+            if obj.evoLinear
+                  out = obj.A * input;
+            else
+                if ~obj.evoNLhasParams
+                    out = obj.f(input);
+                else
+                    out = obj.f(input, obj.evoNLParams);
+                end
+            end
+        end
+        function out = doEmission(obj, input)
+            if obj.emiLinear
+                  out = obj.H * input;
+            else
+                if ~obj.emiNLhasParams
+                    out = obj.f(input);
+                else
+                    out = obj.f(input, obj.emiNLParams);
+                end
+            end
+        end
+        % ------------------------------------------------
+        
    end
    
    methods (Static)
@@ -152,6 +232,6 @@ classdef dynamicalSystem
        function val = isnumscal(x)
            val = isnumeric(x) && isscalar(x);
        end
-       
+       val = obj.parameterHash;
    end
 end

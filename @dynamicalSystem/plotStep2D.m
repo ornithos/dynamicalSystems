@@ -4,14 +4,14 @@ function plotStep2D(obj, posteriorType)
     plot(obj.x0.mu(1), obj.x0.mu(2), 'b+');
     hold on;
     
-    usePosterior = obj.posterior.(posteriorType);
+    usePosterior = obj.(posteriorType);
     mu      = usePosterior.mu;
     sigma   = usePosterior.sigma;
     
     m       = obj.x0.mu;
     P       = obj.x0.sigma;
     
-    for tt = 1:obj.T
+    for tt = 1:obj.d.T
         % one step ahead
         m_minus         = obj.A * m;
         P_minus         = obj.A * P * obj.A' + obj.Q;

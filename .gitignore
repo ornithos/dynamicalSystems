@@ -1,0 +1,8 @@
+# autosave files
+*.m~
+
+# macOS directory setting
+.DS_Store
+
+# do not backup trash directory
+__trash__/
