@@ -6,7 +6,7 @@ function out = parameterHash(obj)
         if obj.evoNLhasParams
             hashes{1} = utils.base.DataHash(obj.par.evoNLParams);
         else
-            hashes{2} = '';
+            hashes{1} = '';
         end
     end
 

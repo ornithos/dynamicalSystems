@@ -1,13 +1,13 @@
-function obj = smoothLinear(obj, bDoValidation)
+function obj = smoothExtended(obj, bDoValidation)
    
-    % obj = obj.smoothLinear
+    % obj = obj.smoothExtended
     % Perform posterior inference on each hidden state in the dynamical
-    % system. This is the RTS Smoother updates / backwards equations for
-    % lienar dynamics. Method of object type 'dynamicalSystem'. If the 
-    % Kalman filter values do not exist, or exist for different parameter
-    % values, we call filterKalman first.
+    % system. This is the Extended RTS Smoother backwards equations for
+    % non-linear dynamics. Method of object type 'dynamicalSystem'. If the 
+    % filter values do not exist, or exist for different parameter
+    % values, we call filterExtended first.
     %
-    % obj = obj.smoothLinear(false)
+    % obj = obj.smoothExtended(false)
     % As above, but performs no input validation.
     %
     % OUTPUT:
@@ -25,7 +25,7 @@ function obj = smoothLinear(obj, bDoValidation)
     % Check for existence of Filter
     if obj.infer.fpHash ~= obj.parameterHash
         fprintf('Filter not run or parameters changed. Rerunning filter...\n');
-        obj = obj.filterKalman(false, false);
+        obj = obj.filterExtended(false, false);
     end
     fMu          = obj.infer.filter.mu;
     fSigma       = obj.infer.filter.sigma;
@@ -37,24 +37,18 @@ function obj = smoothLinear(obj, bDoValidation)
     smoothSigma  = vertcat(cell(obj.d.T-1, 1), P);
     smoothG      = cell(obj.d.T-1,1);
     
-    A            = obj.par.A;
     Q            = obj.par.Q;
-    H            = obj.par.H;
-    R            = obj.par.R;
+    [f, Df, ~, ~] = obj.functionInterfaces;
     
     % main forward step loop
     for tt = (obj.d.T-1):-1:1
         fP_t            = fSigma{tt};
-        m_minus         = A * fMu(:,tt);
-        P_minus         = A * fP_t * A' + Q;
-
-%         barbS10         = obj.A * fP_t;
-%         barbARev        = barbS10' * inv(P_minus);
-%         barbSRev        = fP_t - barbARev * barbS10;
-%         barb_m          = barbARev * m + fMu(:,tt) - barbARev * obj.A * fMu(:,tt);
-%         barb_P          = barbARev * P * barbARev' + barbSRev;
         
-        G               = (fP_t * A') / (P_minus);
+        F               = Df(fMu(:,tt));
+        m_minus         = f(fMu(:,tt));
+        P_minus         = F * fP_t * F' + Q;
+        
+        G               = (fP_t * F') / (P_minus);
         m               = fMu(:,tt) + G * (m - m_minus);
         P               = fP_t + G * (P - P_minus) * G';
         
@@ -65,9 +59,10 @@ function obj = smoothLinear(obj, bDoValidation)
     
     % x0 (purely to get G_0)
     fP_t            = obj.par.x0.sigma;
-    m_minus         = A * obj.par.x0.mu;
-    P_minus         = A * fP_t * A' + Q;
-    G               = (fP_t * A') / (P_minus);
+    F               = Df(obj.par.x0.mu);
+    m_minus         = f(obj.par.x0.mu);
+    P_minus         = F * fP_t * F' + Q;
+    G               = (fP_t * F') / (P_minus);
     m               = obj.par.x0.mu + G * (m - m_minus);
     P               = fP_t + G * (P - P_minus) * G';
     

@@ -99,9 +99,9 @@ function obj = internalProcessX0(obj, arg)
                 'x0sigma incompatible with size of latent space');
             obj.par.x0 = struct('mu', arg{1}, 'sigma', []);
             if all(size(arg{2})==1)
-                obj.par.x0.sigma = eye(obj.d.x)*arg{1};
+                obj.par.x0.sigma = eye(obj.d.x)*arg{2};
             else
-                obj.par.x0.sigma = arg{1};
+                obj.par.x0.sigma = arg{2};
             end
         otherwise
             error('Unexpected number of arguments for x0 (%d). Expected 1 or 2.', nargs);
@@ -160,7 +160,11 @@ function obj = internalProcessEvo(obj, arg)
         else
             error('Don''t know what to do with argument %d in Evolution section', ii);
         end
-    end       
+    end
+    
+    if ~exhaustNum
+        error('No covariance matrix detected for evolution distribution');
+    end
 end
             
 function obj = internalProcessEmi(obj, arg)
@@ -215,7 +219,10 @@ function obj = internalProcessEmi(obj, arg)
         else
             error('Don''t know what to do with argument %d in Emission section', ii);
         end
-    end       
+    end
+    if ~exhaustNum
+        error('No covariance matrix detected for emission distribution');
+    end
 end
 
 function obj = internalProcessDat(obj, arg)

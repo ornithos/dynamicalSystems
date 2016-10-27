@@ -34,26 +34,31 @@ function obj = filterExtended(obj, bDoLLH, bDoValidation)
         obj.validationInference;
     end
     
+    % get common interface for function whether they have parameters or
+    % not.
+    [f, Df, h, Dh] = obj.functionInterfaces;
+    
+    
     filterMu        = zeros(obj.d.x, obj.d.T);
     filterSigma     = cell(obj.d.T, 1);
     % initialise t-1 = 0 values to prior
-    m               = obj.x0.mu;
-    P               = obj.x0.sigma;
+    m               = obj.par.x0.mu;
+    P               = obj.par.x0.sigma;
     d               = obj.d.y;
     Q               = obj.par.Q;
     R               = obj.par.R;
     
     % main forward step loop
     for tt = 1:obj.d.T
-        F               = obj.par.Df(m, obj.par.evoNLParams);
-        m_minus         = obj.par.f(m, obj.par.evoNLParams);
+        F               = Df(m);
+        m_minus         = f(m);
         P_minus         = F * P * F' + Q;
 
-        H               = obj.par.Dh(m_minus, obj.par.emiNLParams);
+        H               = Dh(m_minus);
         S               = H * P_minus * H' + R;
         [Sinv, lam]     = utils.math.pinvAndEig(S, 1e-12);
         K               = (P_minus * H') * Sinv;
-        deltaY          = obj.y(:,tt) - obj.par.h(m_minus, obj.par.emiNLParams);
+        deltaY          = obj.y(:,tt) - h(m_minus);
         m               = m_minus + K * deltaY;
         P               = P_minus - K * S * K';
         

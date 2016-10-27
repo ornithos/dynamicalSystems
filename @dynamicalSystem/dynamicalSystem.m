@@ -42,10 +42,10 @@ classdef dynamicalSystem
    % - A struct containing fields: warnings, verbose
    
    properties
-      x, stack = cell(100,2)
+      stack = cell(100,2)
    end
    properties (SetAccess = protected)
-       y, d
+       x, y, d
        opts = []
        evoLinear = []
        evoNLhasParams = false
@@ -67,15 +67,21 @@ classdef dynamicalSystem
          obj = obj.processInputArgs(varargin);
          
          % pre populate filter/smoother for input data
-         if obj.validationInference(false)
-             fprintf('(%s) Running smoother for input parameters...  ', datestr(now, 'HH:MM:SS'));
-             obj = obj.filterKalman;
-             obj = obj.smoothLinear;
-             fprintf('Complete!\n');
-             obj = obj.save('initialised');
+         if obj.evoLinear && obj.emiLinear
+             if obj.validationInference(false)
+                 fprintf('(%s) Running smoother for input parameters...  ', datestr(now, 'HH:MM:SS'));
+                 obj = obj.filterKalman;
+                 obj = obj.smoothLinear;
+                 fprintf('Complete!\n');
+                 obj = obj.save('initialised');
+             else
+                 if obj.opts.warnings
+                     warning('dynamicalSystem cannot perform initial inference since not all parameters specified.');
+                 end
+             end
          else
              if obj.opts.warnings
-                 warning('dynamicalSystem cannot perform initial inference since not all parameters specified.');
+                 warning('dynamicalSystem has not performed initial inference (nonlinear): choice of algm required.');
              end
          end
          
@@ -191,10 +197,31 @@ classdef dynamicalSystem
           descr = strjoin(sList, '\n');
       end
       
+      % --- (NL) functions ---------------
+      function [fe, Dfe, he, Dhe] = functionInterfaces(obj)
+        % non-linear wrappers for common interface to fns
+        if obj.evoNLhasParams
+            fe = @(x) obj.par.f(x, obj.par.evoNLParams);
+            Dfe = @(x) obj.par.Df(x, obj.par.evoNLParams);
+        else
+            fe = obj.par.f;
+            Dfe = obj.par.Df;
+        end
+        if obj.emiNLhasParams
+            he = @(x) obj.par.h(x, obj.par.emiNLParams);
+            Dhe = @(x) obj.par.Dh(x, obj.par.emiNLParams);
+        else
+            he = obj.par.h;
+            Dhe = obj.par.Dh;
+        end
+      end
+      
       % --- prototypes -------------------
       % inference / learning 
       obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
+      obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
       obj = smoothLinear(obj, bDoValidation); % RTS Smoother
+      obj = smoothExtended(obj, bDoValidation); % Extended (EKF) RTS Smoother
       obj = validationInference(obj, doError); % Input validation
       obj = ssid(obj, L);  % Subspace ID
       [obj, llh] = parameterLearningEM(obj, opts);
@@ -224,9 +251,9 @@ classdef dynamicalSystem
                   out = obj.par.H * input;
             else
                 if ~obj.emiNLhasParams
-                    out = obj.par.f(input);
+                    out = obj.par.h(input);
                 else
-                    out = obj.par.f(input, obj.par.emiNLParams);
+                    out = obj.par.h(input, obj.par.emiNLParams);
                 end
             end
         end

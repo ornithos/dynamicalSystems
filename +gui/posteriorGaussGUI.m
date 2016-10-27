@@ -13,9 +13,12 @@ function posteriorGaussGUI(dsObject, save1, save2)
     
     assert(nargin == 3, 'Valid call is posteriorGaussGUI(dsObject, save1, save2)');
     addpath(utils.system.matlabPath('dynamicalSystems','guide'));
+
     
     [sp1, descr1] = getSavePoint(dsObject, save1);
     [sp2, descr2] = getSavePoint(dsObject, save2);
+    
+    
     sp1.descr = descr1;
     sp2.descr = descr2;
     guidePosteriorGaussGUI(dsObject, sp1, sp2);
@@ -37,3 +40,4 @@ function [out, descr] = getSavePoint(dso, sp)
         descr    = dso.stack{sp, 2};
     end
 end
+

@@ -79,7 +79,6 @@ handles.sp2_2        = 0;
 handles.doLC1        = 1;
 handles.doLC2        = 1;
 handles.lcAlpha      = 1;   % standard dev. of level curve plotted for Gaussian
-doPlot(hObject, eventdata, handles);
 
 handles.popupS1.String = {'Ground Truth', [sp1.descr, '::filter'], [sp1.descr, '::smooth'], ...
     [sp2.descr, '::filter'], [sp2.descr, '::smooth']};
@@ -87,6 +86,90 @@ handles.popupS2.String = {'Ground Truth', [sp1.descr, '::filter'], [sp1.descr, '
     [sp2.descr, '::filter'], [sp2.descr, '::smooth']};
 handles.popupS2.Value = 1 + (handles.pSeries2 + 0) + handles.sp2_1*2;
 
+%% TRANSFORM LATENT INTO OBSERVATION SPACE
+handles.yhat = NaN(size(dsobj.y));
+handles.sp{1}.infer.filter.yhat = NaN(size(dsobj.y));
+handles.sp{2}.infer.filter.yhat = NaN(size(dsobj.y));
+handles.sp{1}.infer.smooth.yhat = NaN(size(dsobj.y));
+handles.sp{2}.infer.smooth.yhat = NaN(size(dsobj.y));
+
+handles.sp{1}.infer.filter.yhatSigma = cell(size(dsobj.y, 2),1);
+handles.sp{2}.infer.filter.yhatSigma = cell(size(dsobj.y, 2),1);
+handles.sp{1}.infer.smooth.yhatSigma = cell(size(dsobj.y, 2),1);
+handles.sp{2}.infer.smooth.yhatSigma = cell(size(dsobj.y, 2),1);
+
+[~, ~, h, Dh] = dsobj.functionInterfaces;
+
+for tt = 1:dsobj.d.T
+    if dsobj.emiLinear
+        % transform posterior mean into observation space
+        handles.yhat(:,tt) = dsobj.par.H * dsobj.x(:,tt);
+        handles.sp{1}.infer.filter.yhat(:,tt) = dsobj.par.H * handles.sp{1}.infer.filter.mu(:,tt);
+        handles.sp{2}.infer.filter.yhat(:,tt) = dsobj.par.H * handles.sp{2}.infer.filter.mu(:,tt);
+        handles.sp{1}.infer.smooth.yhat(:,tt) = dsobj.par.H * handles.sp{1}.infer.smooth.mu(:,tt);
+        handles.sp{2}.infer.smooth.yhat(:,tt) = dsobj.par.H * handles.sp{2}.infer.smooth.mu(:,tt);
+        
+        % transformed covariances into observation space
+        handles.sp{1}.infer.filter.yhatSigma{tt} = dsobj.par.H * handles.sp{1}.infer.filter.sigma{tt} * dsobj.par.H' + dsobj.par.R;
+        handles.sp{2}.infer.filter.yhatSigma{tt} = dsobj.par.H * handles.sp{2}.infer.filter.sigma{tt} * dsobj.par.H' + dsobj.par.R;
+        handles.sp{1}.infer.smooth.yhatSigma{tt} = dsobj.par.H * handles.sp{1}.infer.smooth.sigma{tt} * dsobj.par.H' + dsobj.par.R;
+        handles.sp{2}.infer.smooth.yhatSigma{tt} = dsobj.par.H * handles.sp{2}.infer.smooth.sigma{tt} * dsobj.par.H' + dsobj.par.R;
+    else
+        % transform posterior mean into observation space
+        handles.yhat(:,tt) = dsobj.par.h(dsobj.x(:,tt));
+        handles.sp{1}.infer.filter.yhat(:,tt) = h(handles.sp{1}.infer.filter.mu(:,tt));
+        handles.sp{2}.infer.filter.yhat(:,tt) = h(handles.sp{2}.infer.filter.mu(:,tt));
+        handles.sp{1}.infer.smooth.yhat(:,tt) = h(handles.sp{1}.infer.smooth.mu(:,tt));
+        handles.sp{2}.infer.smooth.yhat(:,tt) = h(handles.sp{2}.infer.smooth.mu(:,tt));
+        
+        % transformed covariances into observation space
+        H               = Dh(dsobj.par.h(handles.sp{1}.infer.filter.mu(:,tt)));
+        handles.sp{1}.infer.filter.yhatSigma{tt} = H * handles.sp{1}.infer.filter.sigma{tt} * H' + dsobj.par.R;
+        H               = Dh(dsobj.par.h(handles.sp{2}.infer.filter.mu(:,tt)));
+        handles.sp{2}.infer.filter.yhatSigma{tt} = H * handles.sp{2}.infer.filter.sigma{tt} * H' + dsobj.par.R;
+        H               = Dh(dsobj.par.h(handles.sp{1}.infer.smooth.mu(:,tt)));
+        handles.sp{1}.infer.smooth.yhatSigma{tt} = H * handles.sp{1}.infer.smooth.sigma{tt} * H' + dsobj.par.R;
+        H               = Dh(dsobj.par.h(handles.sp{2}.infer.smooth.mu(:,tt)));
+        handles.sp{2}.infer.smooth.yhatSigma{tt} = H * handles.sp{2}.infer.smooth.sigma{tt} * H' + dsobj.par.R;
+    end
+end
+
+%% Cut down to 2D for visualisation
+handles.y           = dsobj.y;
+
+if dsobj.d.y > 2
+    if dsobj.opts.warning; warning('Output space is not two dimensional. Only the first two will be used.'); end
+    handles.y           = handles.y(1:2,:);
+    handles.yhat        = handles.yhat(1:2,:);
+    handles.sp{1}.infer.filter.yhat = handles.sp{1}.infer.filter.yhat(1:2,:);
+    handles.sp{2}.infer.filter.yhat = handles.sp{2}.infer.filter.yhat(1:2,:);
+    handles.sp{1}.infer.smooth.yhat = handles.sp{1}.infer.smooth.yhat(1:2,:);
+    handles.sp{2}.infer.smooth.yhat = handles.sp{2}.infer.smooth.yhat(1:2,:);
+    for tt = 1:dsobj.d.T
+        handles.sp{1}.infer.filter.yhatSigma{tt} = handles.sp{1}.infer.filter.yhatSigma{tt}(1:2,1:2);
+        handles.sp{2}.infer.filter.yhatSigma{tt} = handles.sp{2}.infer.filter.yhatSigma{tt}(1:2,1:2);
+        handles.sp{1}.infer.smooth.yhatSigma{tt} = handles.sp{1}.infer.smooth.yhatSigma{tt}(1:2,1:2);
+        handles.sp{2}.infer.smooth.yhatSigma{tt} = handles.sp{2}.infer.smooth.yhatSigma{tt}(1:2,1:2);
+    end
+    
+elseif dsobj.d.y == 1
+    if dsobj.opts.warnings; warning('Output space is not two dimensional. A first ''time'' dimension will be added.'); end
+    handles.y          = [1:dsobj.d.T; handles.y];
+    handles.yhat       = [1:dsobj.d.T; handles.yhat];
+    handles.sp{1}.infer.filter.yhat = [1:dsobj.d.T; handles.sp{1}.infer.filter.yhat];
+    handles.sp{2}.infer.filter.yhat = [1:dsobj.d.T; handles.sp{2}.infer.filter.yhat];
+    handles.sp{1}.infer.smooth.yhat = [1:dsobj.d.T; handles.sp{1}.infer.smooth.yhat];
+    handles.sp{2}.infer.smooth.yhat = [1:dsobj.d.T; handles.sp{2}.infer.smooth.yhat];
+    for tt = 1:dsobj.d.T
+        handles.sp{1}.infer.filter.yhatSigma{tt} = [1e-4, 0; 0, handles.sp{1}.infer.filter.yhatSigma{tt}];
+        handles.sp{2}.infer.filter.yhatSigma{tt} = [1e-4, 0; 0, handles.sp{2}.infer.filter.yhatSigma{tt}];
+        handles.sp{1}.infer.smooth.yhatSigma{tt} = [1e-4, 0; 0, handles.sp{1}.infer.smooth.yhatSigma{tt}];
+        handles.sp{2}.infer.smooth.yhatSigma{tt} = [1e-4, 0; 0, handles.sp{2}.infer.smooth.yhatSigma{tt}];
+    end
+end
+
+%% finit
+doPlot(hObject, eventdata, handles);
 % Update handles structure
 guidata(hObject, handles);
 
@@ -199,89 +282,47 @@ col2 = [160,105,190]/255;
 cla(handles.axes1);
 hold(handles.axes1, 'on');
 
+% observations
 if handles.showEmission
-    plot(handles.axes1, handles.dsObj.y(1,:), handles.dsObj.y(2,:), 'k*');
-    plot(handles.axes1, handles.dsObj.y(1,:), handles.dsObj.y(2,:), 'c:');
+    plot(handles.axes1, handles.y(1,:), handles.y(2,:), 'k*');
+    plot(handles.axes1, handles.y(1,:), handles.y(2,:), 'c:');
 end
 
-if handles.pSeries1 == 0 || handles.pSeries2 == 0
-    col = col1;
-    if handles.pSeries2 == 0; col = col2; end
-    plot(handles.axes1, handles.dsObj.x(1,:), handles.dsObj.x(2,:), '*-', 'Color', col);
-end
+% ground truth
+%if handles.pSeries1 == 0 || handles.pSeries2 == 0
+%    col = col1;
+%    if handles.pSeries2 == 0; col = col2; end
+%    plot(handles.axes1, handles.yhat(1,:), handles.yhat(2,:), '*-', 'Color', col);
+%end
 
-
+% other plots
 doPlotInner(handles.pSeries1, 1-handles.sp2_1, handles, col1, handles.doLC1);
 doPlotInner(handles.pSeries2, 1-handles.sp2_2, handles, col2, handles.doLC2);
-% 
-% if handles.pSeries1 == 1 || handles.pSeries2 == 1
-%     cSeries   = (handles.pSeries2 == 1) + 1;
-%     col       = col1;
-%     if cSeries == 2; col = col2; end
-%     if cSeries == 1 && handles.sp2_1 || cSeries == 2 && handles.sp2_2
-%         fMu    = handles.dsObj.posterior.inFilter.mu;
-%         fSigma = handles.dsObj.posterior.inFilter.sigma;
-%     else
-%         fMu    = handles.dsObj.posterior.filter.mu;
-%         fSigma = handles.dsObj.posterior.filter.sigma;
-%     end
-%     
-%     if (cSeries==1 && handles.doLC1) || (cSeries==2 && handles.doLC2)
-%         for tt=1:handles.dsObj.d.T
-%             plot(handles.axes1, fMu(1,tt), fMu(2,tt), '+', 'Color', col);
-%             lc  = utils.plot.gaussian2DLevelCurve(handles.lcAlpha, fMu(:,tt), fSigma{tt}, 100);
-%             plot(handles.axes1, lc(:,1), lc(:,2), '-', 'Color', col);
-%         end
-%         plot(handles.axes1, fMu(1,:), fMu(2,:), '-', 'Color', col);
-%     else
-%         plot(handles.axes1, fMu(1,:), fMu(2,:), '+-', 'Color', col);
-%     end
-% end
-% 
-% if handles.pSeries1 == 2 || handles.pSeries2 == 2
-%     cSeries   = (handles.pSeries2 == 2) + 1;
-%     col       = col1;
-%     if cSeries == 2; col = col2; end
-%     if cSeries == 1 && handles.sp2_1 || cSeries == 2 && handles.sp2_2
-%         fMu    = handles.dsObj.posterior.inSmooth.mu;
-%         fSigma = handles.dsObj.posterior.inSmooth.sigma;
-%     else
-%         fMu    = handles.dsObj.posterior.smooth.mu;
-%         fSigma = handles.dsObj.posterior.smooth.sigma;
-%     end
-%     
-%     if (cSeries==1 && handles.doLC1) || (cSeries==2 && handles.doLC2)
-%         for tt=1:handles.dsObj.d.T
-%             plot(handles.axes1, fMu(1,tt), fMu(2,tt), '+', 'Color', col);
-%             lc  = utils.plot.gaussian2DLevelCurve(handles.lcAlpha, fMu(:,tt), fSigma{tt}, 100);
-%             plot(handles.axes1, lc(:,1), lc(:,2), '-', 'Color', col);
-%         end
-%         plot(handles.axes1, fMu(1,:), fMu(2,:), '-', 'Color', col);
-%     else
-%         plot(handles.axes1, fMu(1,:), fMu(2,:), '+-', 'Color', col);
-%     end
-% end
+
 hold(handles.axes1, 'off');
+
+
 
 function doPlotInner(type, doSP1, handles, col, doLC)
 
+    % ground truth
     if type == 0 
-        plot(handles.axes1, handles.dsObj.x(1,:), handles.dsObj.x(2,:), '*-', 'Color', col);
+        plot(handles.axes1, handles.yhat(1,:), handles.yhat(2,:), '*-', 'Color', col);
         return
     end
     
     if type == 1 && doSP1
-        mu      = handles.sp{1}.infer.filter.mu;
-        sigma   = handles.sp{1}.infer.filter.sigma;
+        mu      = handles.sp{1}.infer.filter.yhat;
+        sigma   = handles.sp{1}.infer.filter.yhatSigma;
     elseif type == 1 && ~doSP1
-        mu      = handles.sp{2}.infer.filter.mu;
-        sigma   = handles.sp{2}.infer.filter.sigma;
+        mu      = handles.sp{2}.infer.filter.yhat;
+        sigma   = handles.sp{2}.infer.filter.yhatSigma;
     elseif type == 2 && doSP1
-        mu      = handles.sp{1}.infer.smooth.mu;
-        sigma   = handles.sp{1}.infer.smooth.sigma;
+        mu      = handles.sp{1}.infer.smooth.yhat;
+        sigma   = handles.sp{1}.infer.smooth.yhatSigma;
     elseif type == 2 && ~doSP1
-        mu      = handles.sp{2}.infer.smooth.mu;
-        sigma   = handles.sp{2}.infer.smooth.sigma;
+        mu      = handles.sp{2}.infer.smooth.yhat;
+        sigma   = handles.sp{2}.infer.smooth.yhatSigma;
     end
     
     if doLC
