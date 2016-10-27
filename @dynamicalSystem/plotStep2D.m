@@ -1,20 +1,20 @@
 function plotStep2D(obj, posteriorType)
     
     figure
-    plot(obj.x0.mu(1), obj.x0.mu(2), 'b+');
+    plot(obj.par.x0.mu(1), obj.x0.par.mu(2), 'b+');
     hold on;
     
-    usePosterior = obj.(posteriorType);
+    usePosterior = obj.infer.(posteriorType);
     mu      = usePosterior.mu;
     sigma   = usePosterior.sigma;
     
-    m       = obj.x0.mu;
-    P       = obj.x0.sigma;
+    m       = obj.par.x0.mu;
+    P       = obj.par.x0.sigma;
     
     for tt = 1:obj.d.T
         % one step ahead
-        m_minus         = obj.A * m;
-        P_minus         = obj.A * P * obj.A' + obj.Q;
+        m_minus         = obj.par.A * m;
+        P_minus         = obj.par.A * P * obj.par.A' + obj.par.Q;
         [ppt1, ppt2] = plotGaussLevel(m_minus, P_minus, 'g', ':', tt>1);
         pause;
         

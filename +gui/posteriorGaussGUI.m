@@ -31,17 +31,9 @@ function [out, descr] = getSavePoint(dso, sp)
             rethrow(ME);
         end
         [out, descr]     = dso.stackTop;
-    elseif isnumeric(sp) && isscalar(sp)
-        assert(sp <= dso.stackptr, 'save point requested exceeds the save stack')
+    else
+        sp       = dso.stackFind(sp);
         out      = dso.stack{sp, 1};
         descr    = dso.stack{sp, 2};
-    elseif ischar(sp)
-        descr    = dso.getStackDescrList;
-        spfind   = find(strcmpi(sp, descr));
-        assert(~isempty(spfind), 'Cannot find save-point ''%s'' on save stack', sp);
-        out      = dso.stack{spfind, 1};
-        descr    = dso.stack{spfind, 2};
-    else
-        error('unknown save-point type. Expected scalar-numeric, character or empty');
     end
 end

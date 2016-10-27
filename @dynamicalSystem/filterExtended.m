@@ -40,22 +40,24 @@ function obj = filterExtended(obj, bDoLLH, bDoValidation)
     m               = obj.x0.mu;
     P               = obj.x0.sigma;
     d               = obj.d.y;
+    Q               = obj.par.Q;
+    R               = obj.par.R;
     
     % main forward step loop
     for tt = 1:obj.d.T
-        F               = obj.Df(m, obj.evoNLParams);
-        m_minus         = obj.f(m, obj.evoNLParams);
-        P_minus         = F * P * F' + obj.Q;
+        F               = obj.par.Df(m, obj.par.evoNLParams);
+        m_minus         = obj.par.f(m, obj.par.evoNLParams);
+        P_minus         = F * P * F' + Q;
 
-        H               = obj.Dh(m_minus, obj.emiNLParams);
-        S               = H * P_minus * H' + obj.R;
+        H               = obj.par.Dh(m_minus, obj.par.emiNLParams);
+        S               = H * P_minus * H' + R;
         [Sinv, lam]     = utils.math.pinvAndEig(S, 1e-12);
         K               = (P_minus * H') * Sinv;
-        m               = m_minus + K * (obj.y(:,tt) - obj.h(m_minus, obj.emiNLParams));
+        deltaY          = obj.y(:,tt) - obj.par.h(m_minus, obj.par.emiNLParams);
+        m               = m_minus + K * deltaY;
         P               = P_minus - K * S * K';
         
         if bDoLLH
-            deltaY      = obj.y(:,tt) - obj.h(m_minus, obj.emiNLParams);
             llh         = llh - d*pi - 0.5*sum(log(lam)) - 0.5*deltaY'*Sinv*deltaY;
         end
         
@@ -63,9 +65,10 @@ function obj = filterExtended(obj, bDoLLH, bDoValidation)
         filterSigma{tt} = P;
     end
     
-    obj.filter.mu    = filterMu;
-    obj.filter.sigma = filterSigma;
-    if bDoLLH; obj.llh = llh; end;
+    obj.infer.filter.mu    = filterMu;
+    obj.infer.filter.sigma = filterSigma;
+    if bDoLLH; obj.infer.llh = llh; end;
     
-    obj.fpHash     = obj.parameterHash;
+    obj.infer.fpHash     = obj.parameterHash;
+    obj.infer.fType      = 'EKF';
 end

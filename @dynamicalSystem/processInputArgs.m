@@ -87,9 +87,9 @@ function obj = internalProcessX0(obj, arg)
     switch nargs
         case 1
             if all(size(arg{1})==1)
-                obj.x0 = struct('mu', zeros(obj.d.x,1), 'sigma', eye(obj.d.x)*arg{1});
+                obj.par.x0 = struct('mu', zeros(obj.d.x,1), 'sigma', eye(obj.d.x)*arg{1});
             elseif all(size(arg{1})==[obj.d.x, obj.d.x])
-                obj.x0 = struct('mu', zeros(obj.d.x,1), 'sigma', arg{1});
+                obj.par.x0 = struct('mu', zeros(obj.d.x,1), 'sigma', arg{1});
             else
                 error('Invalid dimensions of x0 prior covariance');
             end
@@ -97,11 +97,11 @@ function obj = internalProcessX0(obj, arg)
             assert(numel(setxor(size(arg{1}), [obj.d.x,1]))==0, 'x0mu incompatible with size of latent space');
             assert(all(size(arg{2})==1) || all(size(arg{2})==[obj.d.x, obj.d.x]), ...
                 'x0sigma incompatible with size of latent space');
-            obj.x0 = struct('mu', arg{1}, 'sigma', []);
+            obj.par.x0 = struct('mu', arg{1}, 'sigma', []);
             if all(size(arg{2})==1)
-                obj.x0.sigma = eye(obj.d.x)*arg{1};
+                obj.par.x0.sigma = eye(obj.d.x)*arg{1};
             else
-                obj.x0.sigma = arg{1};
+                obj.par.x0.sigma = arg{1};
             end
         otherwise
             error('Unexpected number of arguments for x0 (%d). Expected 1 or 2.', nargs);
@@ -114,15 +114,15 @@ function obj = internalProcessEvo(obj, arg)
     %{A || f || []}, {Df, Q}
     if isnumeric(arg{1})
         assert(all(size(arg{1})==[obj.d.x, obj.d.x]), 'matrix A is not conformable to dim(x)');
-        obj.A = arg{1};
+        obj.par.A = arg{1};
         obj.evoLinear = true;
     elseif isa(arg{1}, 'function_handle')
-        obj.f = arg{1};
+        obj.par.f = arg{1};
         try
             if ~obj.evoNLhasParams
-                fRng = obj.f(ones(obj.d.x,1));
+                fRng = obj.par.f(ones(obj.d.x,1));
             else
-                fRng = obj.f(ones(obj.d.x,1), obj.evoNLParams);
+                fRng = obj.par.f(ones(obj.d.x,1), obj.evoNLParams);
             end
         catch ME
             warning('Tried f with input of ones(%d, 1). Output error message:\n', obj.d.x);
@@ -138,15 +138,15 @@ function obj = internalProcessEvo(obj, arg)
     for ii = 2:nargs
         if isnumeric(arg{ii}) && ~exhaustNum
             assert(all(size(arg{ii})==[obj.d.x, obj.d.x]), 'matrix Q is not conformable to dim(x)');
-            obj.Q      = arg{ii};
+            obj.par.Q      = arg{ii};
             exhaustNum = true;
         elseif isa(arg{ii}, 'function_handle') && ~exhaustFn
-            obj.Df = arg{ii};
+            obj.par.Df = arg{ii};
             try
                 if ~obj.evoNLhasParams
-                    fRng = obj.Df(ones(obj.d.x,1));
+                    fRng = obj.par.Df(ones(obj.d.x,1));
                 else
-                    fRng = obj.Df(ones(obj.d.x,1), obj.evoNLParams);
+                    fRng = obj.par.Df(ones(obj.d.x,1), obj.evoNLParams);
                 end
             catch ME
                 warning('Tried Df with input of ones(%d, 1). Output error message:\n', obj.d.x);
@@ -169,15 +169,15 @@ function obj = internalProcessEmi(obj, arg)
     %{H || h || []}, {Dh, R},
     if isnumeric(arg{1})
         assert(all(size(arg{1})==[obj.d.y, obj.d.x]), 'matrix H is not conformable to dim(x), dim(y)');
-        obj.H = arg{1};
+        obj.par.H = arg{1};
         obj.emiLinear = true;
     elseif isa(arg{1}, 'function_handle')
-        obj.h = arg{1};
+        obj.par.h = arg{1};
         try
             if ~obj.emiNLhasParams
-                hRng = obj.h(ones(obj.d.x,1));
+                hRng = obj.par.h(ones(obj.d.x,1));
             else
-                hRng = obj.h(ones(obj.d.x,1), obj.emiNLParams);
+                hRng = obj.par.h(ones(obj.d.x,1), obj.par.emiNLParams);
             end
         catch ME
             warning('Tried h with input of ones(%d, 1). Output error message:\n', obj.d.x);
@@ -193,15 +193,15 @@ function obj = internalProcessEmi(obj, arg)
     for ii = 2:nargs
         if isnumeric(arg{ii}) && ~exhaustNum
             assert(all(size(arg{ii})==[obj.d.y, obj.d.y]), 'matrix R is not conformable to dim(y)');
-            obj.R      = arg{ii};
+            obj.par.R      = arg{ii};
             exhaustNum = true;
         elseif isa(arg{ii}, 'function_handle') && ~exhaustFn
-            obj.Dh = arg{ii};
+            obj.par.Dh = arg{ii};
             try
                 if ~obj.emiNLhasParams
-                    hRng = obj.Dh(ones(obj.d.x,1));
+                    hRng = obj.par.Dh(ones(obj.d.x,1));
                 else
-                    hRng = obj.Dh(ones(obj.d.x,1), obj.emiNLParams);
+                    hRng = obj.par.Dh(ones(obj.d.x,1), obj.par.emiNLParams);
                 end
             catch ME
                 warning('Tried Dh with input of ones(%d, 1). Output error message:\n', obj.d.x);
@@ -210,7 +210,7 @@ function obj = internalProcessEmi(obj, arg)
             assert(all(size(hRng)==[obj.d.y,obj.d.x]), 'Df does not map to R^(%d x %d) required by Hessian', obj.d.y, obj.d.x);
             exhaustFn = true;
         elseif isstruct(arg{ii})
-            obj.emiNLParams = arg{ii};
+            obj.par.emiNLParams = arg{ii};
             obj.emiNLhasParams = true;
         else
             error('Don''t know what to do with argument %d in Emission section', ii);

@@ -35,7 +35,7 @@ function obj = ssid(obj, L)
 %     H = H./rows;
 
     % Save results in object
-    obj.H     = H;
-    obj.A     = A;
+    obj.par.H     = H;
+    obj.par.A     = A;
     
 end

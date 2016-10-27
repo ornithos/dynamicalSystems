@@ -42,9 +42,10 @@ classdef dynamicalSystem
    % - A struct containing fields: warnings, verbose
    
    properties
-      x, y, f, Df, h, Dh, x0, stack = cell(100,2), d
+      x, stack = cell(100,2)
    end
    properties (SetAccess = protected)
+       y, d
        opts = []
        evoLinear = []
        evoNLhasParams = false
@@ -52,16 +53,13 @@ classdef dynamicalSystem
        emiNLhasParams = false
        stackptr = 0
        % ----------------- Changeable:
-       A = []
-       H = []
-       Q = []
-       R = []
-       llh = []
-       evoNLParams = struct
-       emiNLParams = struct
-       filter = []
-       fpHash = []
-       smooth = []
+       %  ___ Parameters ___
+       par = struct('x0',struct,'A',[],'H',[],'Q',[],'R',[], ...
+                      'f',[],'Df',[],'h',[],'Dh',[], ...
+                      'evoNLParams',struct,'emiNLParams',struct)
+       %  ___ Inference ___
+       infer = struct('filter',[], 'smooth', [], 'llh', [], 'fType', [], ...
+                      'sType', [], 'fpHash', [])
    end
    methods
       function obj = dynamicalSystem(varargin)
@@ -74,7 +72,7 @@ classdef dynamicalSystem
              obj = obj.filterKalman;
              obj = obj.smoothLinear;
              fprintf('Complete!\n');
-             obj = obj.save('initialised-run');
+             obj = obj.save('initialised');
          else
              if obj.opts.warnings
                  warning('dynamicalSystem cannot perform initial inference since not all parameters specified.');
@@ -86,10 +84,10 @@ classdef dynamicalSystem
       function obj = generateData(obj)
           obj.x       = zeros(obj.d.x, obj.d.T+1);
           obj.y       = zeros(obj.d.y, obj.d.T);
-          obj.x(:,1)  = obj.x0.mu;
+          obj.x(:,1)  = obj.par.x0.mu;
           
-          transChol   = chol(obj.Q);
-          emissChol   = chol(obj.R);
+          transChol   = chol(obj.par.Q);
+          emissChol   = chol(obj.par.R);
           for tt = 1:obj.d.T
               obj.x(:,tt+1) = obj.doTransition(obj.x(:,tt)) + transChol * randn(obj.d.x,1);
               obj.y(:,tt)   = obj.doEmission(obj.x(:,tt+1)) + emissChol * randn(obj.d.y,1);
@@ -97,12 +95,11 @@ classdef dynamicalSystem
           obj.x       = obj.x(:,2:end);
       end
         
-      function obj = useInputParameters(obj)
-          assert(~isempty(obj.inA), 'Cannot use input parameters: no parameters given');
-          obj.A = obj.inA;
-          obj.H = obj.inH;
-          obj.Q = obj.inQ;
-          obj.R = obj.inR;
+      function obj = useSavedParameters(obj, savedName)
+          idx     = obj.findStack(savedName);
+          svPoint = dso.stack{idx, 1};
+          fprintf('Using parameters from save-point ''%s''..\n', dso.stack{idx,2});
+          obj.par = svPoint.par;
       end
       
       
@@ -149,12 +146,27 @@ classdef dynamicalSystem
           end
           descr = obj.stack(1:obj.stackptr,2);
       end
+      
+      function idx = stackFind(obj, test)
+        if isnumeric(test) && isscalar(test)
+            assert(test <= obj.stackptr, 'save point index requested exceeds the save stack')
+            assert(test > 0, 'save point index must be positive');
+            idx = test;
+        elseif ischar(test)
+            descr    = obj.getStackDescrList;
+            idx      = find(strcmpi(test, descr));
+            assert(~isempty(idx), 'Cannot find save-point ''%s'' on save stack', test);
+            assert(isscalar(idx), 'Multiple matches on save stack. Should be impossible.. eep');
+        else
+            error('unknown search type for stack. Expected scalar-numeric, character or empty');
+        end
+    end
       % ------------------------------------------------
         
       % ----- save / stack aliases ------------------------
       function obj = save(obj, descr)
           assert(nargin == 2, 'please provide a description');
-          if obj.fpHash ~= obj.parameterHash
+          if obj.infer.fpHash ~= obj.parameterHash
               if obj.opts.warnings; warning('posterior does not match current parameters'); end
               if obj.evoLinear && obj.emiLinear
                   fprintf('(%s) Running posterior...\n', datestr(now, 'HH:MM:SS'));
@@ -165,21 +177,18 @@ classdef dynamicalSystem
               end
           end
           
-          insertion = struct;
-          insertion.A = obj.A;
-          insertion.H = obj.H;
-          insertion.Q = obj.Q;
-          insertion.R = obj.R;
-          insertion.llh = obj.llh;
-          insertion.evoNLParams = obj.evoNLParams;
-          insertion.emiNLParams = obj.emiNLParams;
-          insertion.filter = obj.filter;
-          insertion.smooth = obj.smooth;
-          insertion.fpHash = obj.fpHash;
-          obj = stackPush(obj, insertion, descr);
+          insertion         = struct;
+          insertion.par     = obj.par;
+          insertion.infer   = obj.infer;
+          obj               = stackPush(obj, insertion, descr);
       end
+      
       function descr = savedList(obj)
-          descr = strjoin(obj.getStackDescrList, ',\n');
+          sList = obj.getStackDescrList;
+          for ii = 1:numel(sList)
+              sList{ii} = [num2str(ii), '. ', sList{ii}];
+          end
+          descr = strjoin(sList, '\n');
       end
       
       % --- prototypes -------------------
@@ -201,23 +210,23 @@ classdef dynamicalSystem
        % ---- Dynamics wrappers --------------------------
         function out = doTransition(obj, input)
             if obj.evoLinear
-                  out = obj.A * input;
+                  out = obj.par.A * input;
             else
                 if ~obj.evoNLhasParams
-                    out = obj.f(input);
+                    out = obj.par.f(input);
                 else
-                    out = obj.f(input, obj.evoNLParams);
+                    out = obj.par.f(input, obj.par.evoNLParams);
                 end
             end
         end
         function out = doEmission(obj, input)
             if obj.emiLinear
-                  out = obj.H * input;
+                  out = obj.par.H * input;
             else
                 if ~obj.emiNLhasParams
-                    out = obj.f(input);
+                    out = obj.par.f(input);
                 else
-                    out = obj.f(input, obj.emiNLParams);
+                    out = obj.par.f(input, obj.par.emiNLParams);
                 end
             end
         end

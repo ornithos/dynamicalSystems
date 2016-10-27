@@ -33,26 +33,31 @@ function obj = filterKalman(obj, bDoLLH, bDoValidation)
     filterMu        = zeros(obj.d.x, obj.d.T);
     filterSigma     = cell(obj.d.T, 1);
     % initialise t-1 = 0 values to prior
-    m               = obj.x0.mu;
-    P               = obj.x0.sigma;
+    m               = obj.par.x0.mu;
+    P               = obj.par.x0.sigma;
     d               = obj.d.y;
+    
+    A               = obj.par.A;
+    Q               = obj.par.Q;
+    H               = obj.par.H;
+    R               = obj.par.R;
     
     % main forward step loop
     for tt = 1:obj.d.T
-        m_minus         = obj.A * m;
-        P_minus         = obj.A * P * obj.A' + obj.Q;
+        m_minus         = A * m;
+        P_minus         = A * P * A' + Q;
 
-        S               = obj.H * P_minus * obj.H' + obj.R;
+        S               = H * P_minus * H' + R;
         [Sinv, lam]     = utils.math.pinvAndEig(S, 1e-12);
-        K               = (P_minus * obj.H') * Sinv;
-        m               = m_minus + K * (obj.y(:,tt) - obj.H * m_minus);
+        K               = (P_minus * H') * Sinv;
+        deltaY          = obj.y(:,tt) - H * m_minus;
+        m               = m_minus + K * deltaY;
         P               = P_minus - K * S * K';
         
         if false && tt > obj.d.T - 5
             fprintf('%8f ', det(P));
         end
         if bDoLLH
-            deltaY      = obj.y(:,tt) - obj.H * m_minus;
             llh         = llh - d*pi - 0.5*sum(log(lam)) - 0.5*deltaY'*Sinv*deltaY;
         end
         
@@ -60,9 +65,10 @@ function obj = filterKalman(obj, bDoLLH, bDoValidation)
         filterSigma{tt} = P;
     end
     
-    obj.filter.mu    = filterMu;
-    obj.filter.sigma = filterSigma;
-    if bDoLLH; obj.llh = llh; end;
+    obj.infer.filter.mu    = filterMu;
+    obj.infer.filter.sigma = filterSigma;
+    if bDoLLH; obj.infer.llh = llh; end;
     
-    obj.fpHash     = obj.parameterHash;
+    obj.infer.fpHash     = obj.parameterHash;
+    obj.infer.fType      = 'Linear';
 end

@@ -30,12 +30,12 @@ dsNewton         = dsNewton.save('learned-all-EM');
 dsNewtonPlot = dsNewton;
 dsNewtonPlot.x = dsNewtonPlot.x(1:2,:);
 for ii = 1:dsNewtonPlot.stackptr
-    H = dsNewtonPlot.stack{ii,1}.H;
-    dsNewtonPlot.stack{ii,1}.filter.mu = H * dsNewtonPlot.stack{ii,1}.filter.mu;
-    dsNewtonPlot.stack{ii,1}.smooth.mu = H * dsNewtonPlot.stack{ii,1}.smooth.mu;
+    H = dsNewtonPlot.stack{ii,1}.par.H;
+    dsNewtonPlot.stack{ii,1}.infer.filter.mu = H * dsNewtonPlot.stack{ii,1}.infer.filter.mu;
+    dsNewtonPlot.stack{ii,1}.infer.smooth.mu = H * dsNewtonPlot.stack{ii,1}.infer.smooth.mu;
     for tt = 1:dsNewtonPlot.d.T
-        dsNewtonPlot.stack{ii,1}.filter.sigma{tt} = H * dsNewtonPlot.stack{ii,1}.filter.sigma{tt} * H';
-        dsNewtonPlot.stack{ii,1}.smooth.sigma{tt} = H * dsNewtonPlot.stack{ii,1}.smooth.sigma{tt} * H';
+        dsNewtonPlot.stack{ii,1}.infer.filter.sigma{tt} = H * dsNewtonPlot.stack{ii,1}.infer.filter.sigma{tt} * H';
+        dsNewtonPlot.stack{ii,1}.infer.smooth.sigma{tt} = H * dsNewtonPlot.stack{ii,1}.infer.smooth.sigma{tt} * H';
     end
 end
 %dsNewtonPlot.filter.mu = H * dsNewtonPlot.filter.mu;

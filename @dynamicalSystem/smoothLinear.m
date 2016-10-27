@@ -23,15 +23,12 @@ function obj = smoothLinear(obj, bDoValidation)
     end
     
     % Check for existence of Filter
-    if ~isfield(obj.filter, 'sigma') || numel(obj.filter.sigma) ~= obj.d.T
-        fprintf('Filter estimates not found or incorrect format. Rerunning filter...\n');
-        obj = obj.posteriorFilter(false, false);
-    elseif obj.fpHash ~= obj.parameterHash
-        fprintf('Parameter values changed since last filter. Rerunning filter...\n');
+    if obj.infer.fpHash ~= obj.parameterHash
+        fprintf('Filter not run or parameters changed. Rerunning filter...\n');
         obj = obj.posteriorFilter(false, false);
     end
-    fMu          = obj.filter.mu;
-    fSigma       = obj.filter.sigma;
+    fMu          = obj.infer.filter.mu;
+    fSigma       = obj.infer.filter.sigma;
     
     % initialise backward prior @ T = forward, and pre-allocate remaining.
     m            = fMu(:,obj.d.T);
@@ -40,12 +37,16 @@ function obj = smoothLinear(obj, bDoValidation)
     smoothSigma  = vertcat(cell(obj.d.T-1, 1), P);
     smoothG      = cell(obj.d.T-1,1);
     
+    A            = obj.par.A;
+    Q            = obj.par.Q;
+    H            = obj.par.H;
+    R            = obj.par.R;
     
     % main forward step loop
     for tt = (obj.d.T-1):-1:1
         fP_t            = fSigma{tt};
-        m_minus         = obj.A * fMu(:,tt);
-        P_minus         = obj.A * fP_t * obj.A' + obj.Q;
+        m_minus         = A * fMu(:,tt);
+        P_minus         = A * fP_t * A' + Q;
 
 %         barbS10         = obj.A * fP_t;
 %         barbARev        = barbS10' * inv(P_minus);
@@ -53,7 +54,7 @@ function obj = smoothLinear(obj, bDoValidation)
 %         barb_m          = barbARev * m + fMu(:,tt) - barbARev * obj.A * fMu(:,tt);
 %         barb_P          = barbARev * P * barbARev' + barbSRev;
         
-        G               = (fP_t * obj.A') / (P_minus);
+        G               = (fP_t * A') / (P_minus);
         m               = fMu(:,tt) + G * (m - m_minus);
         P               = fP_t + G * (P - P_minus) * G';
         
@@ -63,16 +64,18 @@ function obj = smoothLinear(obj, bDoValidation)
     end
     
     % x0 (purely to get G_0)
-    fP_t            = obj.x0.sigma;
-    m_minus         = obj.A * obj.x0.mu;
-    P_minus         = obj.A * fP_t * obj.A' + obj.Q;
-    G               = (fP_t * obj.A') / (P_minus);
-    m               = obj.x0.mu + G * (m - m_minus);
+    fP_t            = obj.par.x0.sigma;
+    m_minus         = A * obj.par.x0.mu;
+    P_minus         = A * fP_t * A' + Q;
+    G               = (fP_t * A') / (P_minus);
+    m               = obj.par.x0.mu + G * (m - m_minus);
     P               = fP_t + G * (P - P_minus) * G';
     
     % save out
-    obj.smooth.mu    = smoothMu;
-    obj.smooth.sigma = smoothSigma;
-    obj.smooth.G     = smoothG;
-    obj.smooth.x0    = struct('mu', m, 'sigma', P, 'G', G);
+    obj.infer.smooth.mu    = smoothMu;
+    obj.infer.smooth.sigma = smoothSigma;
+    obj.infer.smooth.G     = smoothG;
+    obj.infer.smooth.x0    = struct('mu', m, 'sigma', P, 'G', G);
+    
+    obj.infer.sType        = 'Linear';
 end

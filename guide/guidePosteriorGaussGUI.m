@@ -271,17 +271,17 @@ function doPlotInner(type, doSP1, handles, col, doLC)
     end
     
     if type == 1 && doSP1
-        mu      = handles.sp{1}.filter.mu;
-        sigma   = handles.sp{1}.filter.sigma;
+        mu      = handles.sp{1}.infer.filter.mu;
+        sigma   = handles.sp{1}.infer.filter.sigma;
     elseif type == 1 && ~doSP1
-        mu      = handles.sp{2}.filter.mu;
-        sigma   = handles.sp{2}.filter.sigma;
+        mu      = handles.sp{2}.infer.filter.mu;
+        sigma   = handles.sp{2}.infer.filter.sigma;
     elseif type == 2 && doSP1
-        mu      = handles.sp{1}.smooth.mu;
-        sigma   = handles.sp{1}.smooth.sigma;
+        mu      = handles.sp{1}.infer.smooth.mu;
+        sigma   = handles.sp{1}.infer.smooth.sigma;
     elseif type == 2 && ~doSP1
-        mu      = handles.sp{2}.smooth.mu;
-        sigma   = handles.sp{2}.smooth.sigma;
+        mu      = handles.sp{2}.infer.smooth.mu;
+        sigma   = handles.sp{2}.infer.smooth.sigma;
     end
     
     if doLC
