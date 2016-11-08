@@ -17,7 +17,6 @@ function obj = filterExtended(obj, bDoLLH, bDoValidation)
     
     % FOR ALEX:
     % * How does LLH work here - can we calculate it in the same way?
-    % * How do we record which type of inference was used?
     
     if nargin <3 || isempty(bDoValidation)
         bDoValidation = true;
@@ -26,9 +25,7 @@ function obj = filterExtended(obj, bDoLLH, bDoValidation)
     if nargin < 2 || isempty(bDoLLH)
         bDoLLH = false;
     end
-    if bDoLLH
-        llh = 0;
-    end
+    llh = 0;
     
     if bDoValidation
         obj.validationInference;

@@ -23,9 +23,13 @@ function obj = smoothExtended(obj, bDoValidation)
     end
     
     % Check for existence of Filter
-    if obj.infer.fpHash ~= obj.parameterHash
+    if isempty(obj.infer.fpHash) || strcmp(obj.infer.fpHash, obj.parameterHash)
         fprintf('Filter not run or parameters changed. Rerunning filter...\n');
         obj = obj.filterExtended(false, false);
+    end
+    if ~strcmp(obj.infer.fType, 'EKF')
+        fprintf('EKF not run (filter: %s). Running EKF instead...\n', obj.infer.fType);
+        obj = obj.filterUnscented(false, false);
     end
     fMu          = obj.infer.filter.mu;
     fSigma       = obj.infer.filter.sigma;
@@ -72,5 +76,5 @@ function obj = smoothExtended(obj, bDoValidation)
     obj.infer.smooth.G     = smoothG;
     obj.infer.smooth.x0    = struct('mu', m, 'sigma', P, 'G', G);
     
-    obj.infer.sType        = 'Linear';
+    obj.infer.sType        = 'EKF';
 end

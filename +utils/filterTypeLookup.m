@@ -14,6 +14,6 @@ function out = filterTypeLookup(type)
         case {'pf ', 'par'}
             out = 'Particle';
         otherwise
-            error('Unknown filter type specified'}
+            error('Unknown filter type specified')
     end
 end

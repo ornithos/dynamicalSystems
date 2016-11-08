@@ -1,7 +1,7 @@
 % initial "circular motion" trial
 tmp = dynamicalSystem(2, 2, 'x0', 1e-5, 'evolution', [cos(0.03) -sin(0.03); sin(0.03) cos(0.03)], eye(2), ...
         'emission', 0.5*eye(2), 0.2*eye(2), 'data', 50);
-tmp = tmp.posteriorSmooth;
+tmp = tmp.smoothLinear;
 gui.posteriorGaussGUI(tmp);
 
 %%
@@ -26,6 +26,13 @@ opts             = struct('maxiter', 1000, 'epsilon', 1e-3);
 [dsNewton, llh]  = dsNewton.parameterLearningEM(opts);
 dsNewton         = dsNewton.save('learned-all-EM');
 
+dsNewton         = dsNewton.useSavedParameters('original-params');
+[dsNewton, llh]  = dsNewton.parameterLearningEM(opts);
+dsNewton         = dsNewton.save('learned-all-EM2');
+
+dsNewton         = dsNewton.useSavedParameters('original-params');
+[dsNewton, llh]  = dsNewton.parameterLearningEM(opts);
+dsNewton         = dsNewton.save('learned-all-EM3');
 %%
 dsNewtonPlot = dsNewton;
 dsNewtonPlot.x = dsNewtonPlot.x(1:2,:);

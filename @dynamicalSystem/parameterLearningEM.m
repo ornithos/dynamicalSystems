@@ -1,5 +1,6 @@
 function [obj, llh] = parameterLearningEM(obj, opts)
 
+if nargin < 2 || isempty(opts); opts = struct; end
 optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL', 5, 'verbose', true);
 opts            = utils.base.parse_argumentlist(opts, optsDefault);
 
