@@ -20,6 +20,7 @@ function obj = processInputArgs(obj, args)
         obj.d.y = args{2};
         
         trackDone = false(4,1);
+        xtrue     = [];
         ii = 3;
         assert(ischar(args{ii}), 'Unexpected argument in position %d: expected string', ii);
         curSection = internalProcessChar(args{ii}, ii, obj.opts.warnings);
@@ -31,9 +32,9 @@ function obj = processInputArgs(obj, args)
                 jj = jj + 1;
             end
             
-            if ischar(args{jj})
-                error('Insufficient arguments for section (%s)', curSection);
-            end
+%             if ischar(args{jj})
+%                 error('Insufficient arguments for section (%s)', curSection);
+%             end
             
             switch curSection
                 case 'evo'
@@ -48,6 +49,10 @@ function obj = processInputArgs(obj, args)
                 case 'dat'
                     dataStuff = args(ii:jj);
                     trackDone(4) = true;
+                case 'xtr'
+                    assert(ii == jj, 'xtrue can have at most one argument');
+                    xtrue   = args{ii};
+                    % optional: no trackDone
                 otherwise
                     error('Unknown section marker ''%d''', curSection);
             end
@@ -60,9 +65,19 @@ function obj = processInputArgs(obj, args)
             ii         = jj + 1;
             curSection = internalProcessChar(args{ii}, ii, obj.opts.warnings);
             ii         = ii + 1;
+            while ischar(args{ii})
+                warning('Input: ignoring character string ''%s''', args{ii+1});
+                ii         = ii + 1;
+            end
         end
         
         obj      = internalProcessDat(obj, dataStuff);
+        if ~isempty(xtrue)
+            assert(all(size(xtrue) == [obj.d.x, obj.d.T]), 'x must be matrix %d x %d', ...
+                    obj.d.x, obj.d.T);
+            obj.x = xtrue;
+        end
+        
         allSects = {'evo', 'emi', 'x0 ', 'dat'};
         if ~all(trackDone)
             error('No arguments for sections: %s', strjoin(allSects(~trackDone), ','));
@@ -72,12 +87,12 @@ end
 function arg = internalProcessChar(arg, ii, doWarning)
     orig = arg;
     if numel(arg < 3); arg = [arg, '   ']; arg = arg(1:3); end
-    assert(any(strcmpi(arg(1:3), {'evo', 'emi', 'x0 ', 'dat'})), ...
+    assert(any(strcmpi(arg(1:3), {'evo', 'emi', 'x0 ', 'dat', 'xtr'})), ...
         ['string argument #%d (%s) is not one of', ...
         ' the valid markers {x0, evolution, emission, data}'], ii, orig);
-    argsFullnames = {'x0', 'evolution', 'emission', 'data'};
+    argsFullnames = {'x0', 'evolution', 'emission', 'data', 'xtrue'};
     if doWarning && ~any(strcmpi(orig, argsFullnames))
-        chosen = find(arg, {'evo', 'emi', 'x0 ', 'dat'});
+        chosen = find(arg, {'evo', 'emi', 'x0 ', 'dat', 'xtr'});
         warning('arg %d: interpreted %s as %s', orig, argsFullnames{chosen});
     end
 end
@@ -118,17 +133,12 @@ function obj = internalProcessEvo(obj, arg)
         obj.evoLinear = true;
     elseif isa(arg{1}, 'function_handle')
         obj.par.f = arg{1};
-        try
-            if ~obj.evoNLhasParams
-                fRng = obj.par.f(ones(obj.d.x,1));
-            else
-                fRng = obj.par.f(ones(obj.d.x,1), obj.evoNLParams);
-            end
-        catch ME
-            warning('Tried f with input of ones(%d, 1). Output error message:\n', obj.d.x);
-            rethrow(ME);
+        if obj.evoNLhasParams
+            f = @(x) obj.par.f(x, obj.evoNLParams);
+        else
+            f = obj.par.f;
         end
-        assert(all(size(fRng)==[obj.d.x,1]), 'f does not map back into (column vec) in R^%d', obj.d.x);
+        internalTestFun(f, 'f', false, obj.d.x, [obj.d.x,1]);
     else
         error('Unknown argument type (%s) in Evolution argument %d', class(arg{1}), 1);
     end
@@ -142,17 +152,12 @@ function obj = internalProcessEvo(obj, arg)
             exhaustNum = true;
         elseif isa(arg{ii}, 'function_handle') && ~exhaustFn
             obj.par.Df = arg{ii};
-            try
-                if ~obj.evoNLhasParams
-                    fRng = obj.par.Df(ones(obj.d.x,1));
-                else
-                    fRng = obj.par.Df(ones(obj.d.x,1), obj.evoNLParams);
-                end
-            catch ME
-                warning('Tried Df with input of ones(%d, 1). Output error message:\n', obj.d.x);
-                rethrow(ME);
+            if obj.evoNLhasParams
+                f = @(x) obj.par.Df(x, obj.evoNLParams);
+            else
+                f = obj.par.Df;
             end
-            assert(all(size(fRng)==[obj.d.x,obj.d.x]), 'Df does not map to R^(%d x %d) required by Hessian', obj.d.x, obj.d.x);
+            internalTestFun(f, 'Df', true, obj.d.x, [obj.d.x, obj.d.x]);
             exhaustFn = true;
         elseif isstruct(arg{ii})
             obj.evoNLParams = arg{ii};
@@ -177,17 +182,12 @@ function obj = internalProcessEmi(obj, arg)
         obj.emiLinear = true;
     elseif isa(arg{1}, 'function_handle')
         obj.par.h = arg{1};
-        try
-            if ~obj.emiNLhasParams
-                hRng = obj.par.h(ones(obj.d.x,1));
-            else
-                hRng = obj.par.h(ones(obj.d.x,1), obj.par.emiNLParams);
-            end
-        catch ME
-            warning('Tried h with input of ones(%d, 1). Output error message:\n', obj.d.x);
-            rethrow(ME);
+        if obj.emiNLhasParams
+            f = @(x) obj.par.h(x, obj.emiNLParams);
+        else
+            f = obj.par.h;
         end
-        assert(all(size(hRng)==[obj.d.y,1]), 'h does not map into output space (column vec in R^%d)', obj.d.y);
+        internalTestFun(f, 'h', false, obj.d.x, [obj.d.y,1]);
     else
         error('Unknown argument type (%s) in Emission argument %d', class(arg{1}), 1);
     end
@@ -201,18 +201,12 @@ function obj = internalProcessEmi(obj, arg)
             exhaustNum = true;
         elseif isa(arg{ii}, 'function_handle') && ~exhaustFn
             obj.par.Dh = arg{ii};
-            try
-                if ~obj.emiNLhasParams
-                    hRng = obj.par.Dh(ones(obj.d.x,1));
-                else
-                    hRng = obj.par.Dh(ones(obj.d.x,1), obj.par.emiNLParams);
-                end
-            catch ME
-                warning('Tried Dh with input of ones(%d, 1). Output error message:\n', obj.d.x);
-                rethrow(ME);
+            if obj.emiNLhasParams
+                f = @(x) obj.par.Dh(x, obj.emiNLParams);
+            else
+                f = obj.par.Dh;
             end
-            assert(all(size(hRng)==[obj.d.y,obj.d.x]), 'Df does not map to R^(%d x %d) required by Hessian', obj.d.y, obj.d.x);
-            exhaustFn = true;
+            internalTestFun(f, 'Dh', true, obj.d.x, [obj.d.y, obj.d.x]);
         elseif isstruct(arg{ii})
             obj.par.emiNLParams = arg{ii};
             obj.emiNLhasParams = true;
@@ -244,15 +238,37 @@ function obj = internalProcessDat(obj, arg)
         if obj.opts.warnings && size(obj.y,1) > obj.d.y
             warning('more dimensions in observations than timepoints. y is (d x T) matrix.');
         end
-        if obj.opts.warnings
+        if obj.opts.warnings && narg == 2
             if ~utils.base.isscalarint(arg{2})
                 warning('extraneous argument in data section is unexpected type (%s). Ignoring..', class(arg{2}))
             else
                 if arg{2} ~= obj.d.T
-                    warning('additional data argument interpreted as dimension: different dim to supplied data y');
+                    warning('additional data argument interpreted as dimension: different dim to supplied data y. Ignored.');
                 end
             end
         end
     end
     
+end
+
+function internalTestFun(f, nm, isDif, inputDim, outputDim)
+    try
+        fRng = f(ones(inputDim,1));
+    catch ME
+        warning('Tried %s with input of ones(%d, 1). Output error message:\n', nm, inputDim);
+        rethrow(ME);
+    end
+    assert(all(size(fRng)==outputDim), ['%s does not map into output space ', ...
+        '(column vec in R^(%d x %d))'], nm, outputDim(1), outputDim(2));
+    
+    if ~isDif
+        try
+            fRng = f(ones(inputDim,10));
+        catch ME
+            warning('Tried %s with matrix of ones(%d, 10). %s must be columnwise vectorised:\n', nm, inputDim);
+            rethrow(ME);
+        end
+        assert(all(size(fRng)==[outputDim(1),10]), ['%s does not process column-wise ', ...
+            'inputs correctly (note D%s need not do so)'], nm, nm);
+    end
 end

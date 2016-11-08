@@ -5,7 +5,8 @@ classdef dynamicalSystem
    %
    % dynamicalSystem(dimx, dimy, 'evolution', {A || f || []}, {Df, Q}
    %                 'emission', {H || h || []}, {Dh, R},
-   %                 'data', {y || T}, 'x0' {x0mu, x0cov}, opts)
+   %                 'data', {y || T}, 'x0' {x0mu, x0cov}, 
+   %                 'xtrue', x, opts)
    %
    % The string arguments can be redistributed as desired, but we assume
    % that they appear in this order for documentation. 
@@ -33,20 +34,22 @@ classdef dynamicalSystem
    % latter may only be specified if all transitions and covariances have
    % also been specified.
    %
-   % % ***** x0 *****
+   % ***** xtrue *****  (~~OPTIONAL~~)
+   % - x: the true latent state, if we have access to it.
+   %
+   % ***** x0 *****
    % - x0mu: the mean of the prior over the latent space (if not given
    % assumed 0)
    % - x0cov: the covariance of the prior over the latent space (required).
    %
-   % *** OPTS ***
+   % *** OPTS ***  (~~OPTIONAL~~)
    % - A struct containing fields: warnings, verbose
    
    properties
-      stack = cell(100,2)
+      opts, stack = cell(100,2)
    end
    properties (SetAccess = protected)
        x, y, d
-       opts = []
        evoLinear = []
        evoNLhasParams = false
        emiLinear = []
@@ -101,13 +104,18 @@ classdef dynamicalSystem
           obj.x       = obj.x(:,2:end);
       end
         
-      function obj = useSavedParameters(obj, savedName)
-          idx     = obj.findStack(savedName);
-          svPoint = dso.stack{idx, 1};
-          fprintf('Using parameters from save-point ''%s''..\n', dso.stack{idx,2});
+      function obj = useSavedParameters(obj, savedName, verbose)
+          if nargin < 3 || isempty(verbose); verbose = true; end
+          idx     = obj.stackFind(savedName);
+          svPoint = obj.stack{idx, 1};
+          if verbose; fprintf('Using parameters from save-point ''%s''..\n', obj.stack{idx,2}); end
           obj.par = svPoint.par;
       end
       
+      function svPoint = getSaved(obj, savedName)
+          idx     = obj.stackFind(savedName);
+          svPoint = obj.stack{idx, 1};
+      end
       
       % ---- Save stack handlers -----------------------
       function obj = stackPush(obj, insertion, descr)
@@ -123,13 +131,19 @@ classdef dynamicalSystem
           obj.stack{obj.stackptr,2} = descr;
       end
         
-      function obj = stackDelete(obj)
+      function obj = stackDelete(obj, pos)
           if obj.stackptr <= 0
               fprintf('Empty save stack. Nothing to do.\n');
               return;
           end
+          if nargin > 1
+              idx = stackFind(obj, pos);
+          else
+              idx = obj.stackptr;
+          end
+          
           maxIdx = size(obj.stack, 1);
-          obj.stack(obj.stackptr,:) = {[],[]};
+          obj.stack(idx,:) = [];
           obj.stackptr = obj.stackptr - 1;
             
           if obj.stackptr < maxIdx - 150
@@ -220,8 +234,11 @@ classdef dynamicalSystem
       % inference / learning 
       obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
       obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
+      obj = filterUnscented(obj, bDoLLH, bDoValidation, utpar); % Unscented (UKF) Filter
+      obj = filterMix(obj, fType, bDoValidation, utpar) % one of dynamics linear, other piped to NL.
       obj = smoothLinear(obj, bDoValidation); % RTS Smoother
       obj = smoothExtended(obj, bDoValidation); % Extended (EKF) RTS Smoother
+      obj = smoothUscented(obj, bDoValidation, utpar); % Unscented (UKF) RTS Smoother
       obj = validationInference(obj, doError); % Input validation
       obj = ssid(obj, L);  % Subspace ID
       [obj, llh] = parameterLearningEM(obj, opts);
