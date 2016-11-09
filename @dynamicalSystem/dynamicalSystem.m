@@ -186,7 +186,7 @@ classdef dynamicalSystem
       % ----- save / stack aliases ------------------------
       function obj = save(obj, descr)
           assert(nargin == 2, 'please provide a description');
-          if obj.infer.fpHash ~= obj.parameterHash
+          if ~strcmp(obj.infer.fpHash, obj.parameterHash)
               if obj.opts.warnings; warning('posterior does not match current parameters'); end
               if obj.evoLinear && obj.emiLinear
                   fprintf('(%s) Running posterior...\n', datestr(now, 'HH:MM:SS'));

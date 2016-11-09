@@ -34,7 +34,7 @@ for ii = 1:opts.maxiter
     llh(ii+1) = obj.infer.llh;
     delta     = llh(ii+1) - llh(ii);
     if abs(delta) < opts.epsilon
-        fprintf('(%s) EM Converged in %d iterations (%.4f) \n', datestr(now), ii, delta);
+        fprintf('(%s) EM Converged in %d iterations (%.3e < %.3e) \n', datestr(now), ii, delta, opts.epsilon);
         break
     end
 %     obj       = obj.parameterLearningMStep;

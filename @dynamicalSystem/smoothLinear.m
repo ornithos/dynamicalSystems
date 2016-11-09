@@ -23,7 +23,7 @@ function obj = smoothLinear(obj, bDoValidation)
     end
     
     % Check for existence of Filter
-    if obj.infer.fpHash ~= obj.parameterHash
+    if ~strcmp(obj.infer.fpHash, obj.parameterHash)
         fprintf('Filter not run or parameters changed. Rerunning filter...\n');
         obj = obj.filterKalman(false, false);
     end

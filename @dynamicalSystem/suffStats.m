@@ -4,7 +4,7 @@ function s = suffStats(obj)
 % equations. They are typically pairwise expectations.
 
 % Check for existence of Smoothed estimates
-if obj.infer.fpHash ~= obj.parameterHash
+if ~strcmp(obj.infer.fpHash, obj.parameterHash)
     fprintf('Filter not run or parameters changed. Rerunning filter...\n');
     obj = obj.filterKalman(false, false);
     obj = obj.smoothLinear(false);

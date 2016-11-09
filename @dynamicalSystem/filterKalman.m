@@ -58,7 +58,7 @@ function obj = filterKalman(obj, bDoLLH, bDoValidation)
             fprintf('%8f ', det(P));
         end
         if bDoLLH
-            llh         = llh - d*pi - 0.5*sum(log(lam)) - 0.5*deltaY'*Sinv*deltaY;
+            llh         = llh - 0.5*d*log(2*pi) - 0.5*sum(log(lam)) - 0.5*deltaY'*Sinv*deltaY;
         end
         
         filterMu(:,tt)  = m;
