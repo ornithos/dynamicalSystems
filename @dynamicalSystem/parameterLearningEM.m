@@ -25,11 +25,12 @@ else
 end
 
 llh        = [-Inf; zeros(opts.maxiter,1)];
-% prevParams = getAllParams(obj);
 
+obj.validationInference;  % ensure able to do inference
+fOpts      = struct('bDoValidation', false, 'bIgnoreHash', true);
 for ii = 1:opts.maxiter
-    obj    = obj.filterKalman(true, false);
-    obj    = obj.smoothLinear;
+    obj    = obj.filter('Kalman', true, [], fOpts);
+    obj    = obj.smooth('Linear', [], fOpts);
 
     llh(ii+1) = obj.infer.llh;
     delta     = llh(ii+1) - llh(ii);
@@ -39,8 +40,8 @@ for ii = 1:opts.maxiter
     end
 %     obj       = obj.parameterLearningMStep;
     obj       = obj.parameterLearningMStep([], {'A', 'Q'});
-    obj       = obj.filterKalman;
-    obj       = obj.smoothLinear;
+    obj       = obj.filter('Kalman', [], [], fOpts);
+    obj       = obj.smooth('Linear', [], fOpts);
     obj       = obj.parameterLearningMStep([], {'H', 'R'});
     
     if opts.verbose

@@ -81,8 +81,9 @@ end
 
 function llh = numgradLLH(dso, X, par)
     dso.par.(par) = X;
-    dso = dso.filterKalman(true, false);
-    dso = dso.smoothLinear(false);
+    fOpts = struct('bDoValidation', false, 'bIgnoreHash', true);
+    dso = dso.filter('Kalman', true, [], fOpts);
+    dso = dso.smooth('Linear', [], fOpts);
     llh = dso.infer.llh;
 end
 

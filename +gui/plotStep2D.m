@@ -1,7 +1,17 @@
 function plotStep2D(obj, posteriorType)
+    % plotStep2D(obj, posteriorType)
+    %
+    % INPUTS:
+    % obj           - a dynamicalSystems object.
+    % posteriorType - either 'filter' or 'smooth'
+    %
+    % DESCRIPTION:
+    % Plot prediction and correction posteriors at each time step. Useful
+    % demonstration of how kalman filter works. Note: coded assuming 2D
+    % state space: if not will error.
     
     figure
-    plot(obj.par.x0.mu(1), obj.x0.par.mu(2), 'b+');
+    plot(obj.par.x0.mu(1), obj.par.x0.mu(2), 'b+');
     hold on;
     
     usePosterior = obj.infer.(posteriorType);

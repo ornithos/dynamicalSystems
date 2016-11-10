@@ -233,23 +233,27 @@ classdef dynamicalSystem
       % --- prototypes -------------------
       % inference / learning 
       obj = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
-      obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
-      obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
-      obj = filterUnscented(obj, bDoLLH, bDoValidation, utpar); % Unscented (UKF) Filter
-      obj = filterMix(obj, fType, bDoValidation, utpar) % one of dynamics linear, other piped to NL.
+%       obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
+%       obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
+%       obj = filterUnscented(obj, bDoLLH, bDoValidation, utpar); % Unscented (UKF) Filter
+      obj = filter(obj, fType, bDoLLH, utpar, opts) % one of dynamics linear, other piped to NL.
       obj = getGradient(obj, par, doCheck) % get gradient of parameters
-      obj = smoothLinear(obj, bDoValidation); % RTS Smoother
-      obj = smoothExtended(obj, bDoValidation); % Extended (EKF) RTS Smoother
-      obj = smoothUscented(obj, bDoValidation, utpar); % Unscented (UKF) RTS Smoother
-      obj = validationInference(obj, doError); % Input validation
+%       obj = smoothLinear(obj, bDoValidation); % RTS Smoother
+%        obj = smoothExtended(obj, bDoValidation); % Extended (EKF) RTS Smoother
+%       obj = smoothUnscented(obj, bDoValidation, utpar); % Unscented (UKF) RTS Smoother
+      obj = smooth(obj, fType, utpar, opts) % one of dynamics linear, other piped to NL.
       obj = ssid(obj, L);  % Subspace ID
-      obj = suffStats(obj);  % Sufficient statistics required for learning
       [obj, llh] = parameterLearningEM(obj, opts);
-      obj = parameterLearningMStep(obj, verbose, updateOnly);
-      obj = calcLogLikelihood(obj);
+      
       
       % graphical
       plotStep2D(obj, posteriorType)
+   end
+   
+   methods (Access = protected, Hidden=true)
+       obj = parameterLearningMStep(obj, verbose, updateOnly); % internals for EM
+       obj = validationInference(obj, doError); % Input validation
+       obj = suffStats(obj, opts);  % Sufficient statistics required for learning
    end
    
    methods (Access = private)

@@ -1,13 +1,20 @@
-function s = suffStats(obj)
-% s = suffStats(obj, verbose)
+function s = suffStats(obj, opts)
+% s = suffStats(obj, opts)
 % Calculates the various quantities used in Särkkä's parameter estimation
 % equations. They are typically pairwise expectations.
+% opts: verbose, bIgnoreHash, bDoValidation
+if nargin < 2 || isempty(opts)
+    opts = struct;
+end
 
+optsDefault  = struct('verbose', true, 'bIgnoreHash', false);
+opts         = utils.struct.structCoalesce(opts, optsDefault);
+    
 % Check for existence of Smoothed estimates
-if ~strcmp(obj.infer.fpHash, obj.parameterHash)
-    fprintf('Filter not run or parameters changed. Rerunning filter...\n');
-    obj = obj.filterKalman(false, false);
-    obj = obj.smoothLinear(false);
+if ~opts.bIgnoreHash && ~strcmp(obj.infer.fpHash, obj.parameterHash)
+    if opts.verbose; fprintf('Filter not run or parameters changed. Rerunning filter...\n'); end
+    obj = obj.filter('Kalman', false, [], opts);
+    obj = obj.smooth('Linear', [], opts);
 end
 
 % concatenate with x0 to provide estimates of x from 0 to T
