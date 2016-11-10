@@ -11,7 +11,7 @@ optsDefault  = struct('verbose', true, 'bIgnoreHash', false);
 opts         = utils.struct.structCoalesce(opts, optsDefault);
     
 % Check for existence of Smoothed estimates
-if ~opts.bIgnoreHash && ~strcmp(obj.infer.fpHash, obj.parameterHash)
+if ~opts.bIgnoreHash && obj.parametersChanged
     if opts.verbose; fprintf('Filter not run or parameters changed. Rerunning filter...\n'); end
     obj = obj.filter('Kalman', false, [], opts);
     obj = obj.smooth('Linear', [], opts);

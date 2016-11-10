@@ -18,7 +18,7 @@ Q(4,4)              = 0.2;
 % x0                  = struct('mu', zeros(4,1), 'sigma', eye(4)*1e2);
 x0                  = [];
 dsNewton  = dynamicalSystem(4, 2, 'x0', 1e-5, 'evolution', transition, Q, 'emission', emission, 5*eye(2), 'data', 100);
-dsNewton  = dsNewton.smoothLinear;
+dsNewton  = dsNewton.smooth;
 dsNewton  = dsNewton.save('original-params');
 
 %%

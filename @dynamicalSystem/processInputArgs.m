@@ -1,7 +1,11 @@
 function obj = processInputArgs(obj, args)
 % dynamicalSystem(dim_x, dim_y, 'evolution', {A || f || []}, {Df, Q},
    %                 'emission', {H || h || []}, {Dh, R},
-   %                 'data', {y || T})
+   %                 'data', {y || T},
+   %                 'x0', {P0 || p0}, (m0),
+   %                ('xtrue', x),
+   %                ('control', u, C, (D))
+   %                opts)
    
         nargs = numel(args);
          
@@ -20,6 +24,7 @@ function obj = processInputArgs(obj, args)
         obj.d.y = args{2};
         
         trackDone = false(4,1);
+        isControl = false;
         xtrue     = [];
         ii = 3;
         assert(ischar(args{ii}), 'Unexpected argument in position %d: expected string', ii);
@@ -53,6 +58,10 @@ function obj = processInputArgs(obj, args)
                     assert(ii == jj, 'xtrue can have at most one argument');
                     xtrue   = args{ii};
                     % optional: no trackDone
+                case 'con'
+                    isControl    = true;
+                    controlStuff = args(ii:jj);
+                    % optional: no trackDone
                 otherwise
                     error('Unknown section marker ''%d''', curSection);
             end
@@ -72,6 +81,13 @@ function obj = processInputArgs(obj, args)
         end
         
         obj      = internalProcessDat(obj, dataStuff);
+        
+        obj.par.Cu = zeros(obj.d.x, obj.d.T);
+        obj.par.Du = zeros(obj.d.y, obj.d.T);
+        if isControl
+            obj = internalProcessControl(obj, controlStuff);
+        end
+        
         if ~isempty(xtrue)
             assert(all(size(xtrue) == [obj.d.x, obj.d.T]), 'x must be matrix %d x %d', ...
                     obj.d.x, obj.d.T);
@@ -87,10 +103,10 @@ end
 function arg = internalProcessChar(arg, ii, doWarning)
     orig = arg;
     if numel(arg < 3); arg = [arg, '   ']; arg = arg(1:3); end
-    assert(any(strcmpi(arg(1:3), {'evo', 'emi', 'x0 ', 'dat', 'xtr'})), ...
+    assert(any(strcmpi(arg(1:3), {'evo', 'emi', 'x0 ', 'dat', 'xtr', 'con'})), ...
         ['string argument #%d (%s) is not one of', ...
         ' the valid markers {x0, evolution, emission, data}'], ii, orig);
-    argsFullnames = {'x0', 'evolution', 'emission', 'data', 'xtrue'};
+    argsFullnames = {'x0', 'evolution', 'emission', 'data', 'xtrue', 'control'};
     if doWarning && ~any(strcmpi(orig, argsFullnames))
         chosen = find(arg, {'evo', 'emi', 'x0 ', 'dat', 'xtr'});
         warning('arg %d: interpreted %s as %s', orig, argsFullnames{chosen});
@@ -250,6 +266,147 @@ function obj = internalProcessDat(obj, arg)
     end
     
 end
+
+function obj = internalProcessControl(obj, arg)
+    nargs       = numel(arg);
+    if nargs < 2 || nargs > 3
+        error('control must have 2 or 3 arguments: (u, C) or (u,C,D)');
+    end
+    
+    sizes = zeros(2,nargs);
+    for ii = 1:nargs
+        assert(isnumeric(arg{ii}) && ismatrix(arg{ii}), 'control input %d must be numeric matrix', ii);
+        sizes(:,ii) = size(arg{ii});
+    end
+    
+    % rows 1 = u, 2 = C, 3 = D
+    possible = [any(sizes == obj.d.T); any(sizes == obj.d.x); any(sizes == obj.d.y)];
+    bad      = sum(possible)==0 & sum(sizes)>0;
+    if any(bad)
+        error(['Argument(s) %s in control are not conformable to time series length T=%d, ', ...
+               'latent dim n=%d, or observed dim d=%d. Unable to process them.'], ...
+               utils.base.numjoin(find(bad),','), obj.d.T, obj.d.x, obj.d.y); %#ok
+    end
+    
+    % ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ %
+    % absurdly complex logic here to enable users to specify u, C, D in
+    % almost any order without failure. I started so I finished. I
+    % shouldn't have started. And I'm sure it's not foolproof.
+    fail = false;
+    for ii = 1:nargs
+        if isempty(arg{ii})
+            if ii == 1
+                error('First control argument should be u: cannot be empty');
+            elseif ii == 2
+                obj.par.C = zeros(obj.d.x, obj.d.u);
+                continue
+            elseif ii == 3
+                obj.par.D = zeros(obj.d.y, obj.d.u);
+                continue
+            end
+        end
+        rowtotals = sum(possible, 2);
+        row       = find(rowtotals == 1, 1);
+        if isempty(row)
+            fail = true;
+            break
+        else
+            col      = find(possible(row,:));
+            possible(:,col) = zeros(3,1);
+            switch row
+                case 1
+                    u = arg{col};
+                    if size(u,1)==obj.d.T && size(u,2) ~= obj.d.T
+                        warning('in future please specify ''u'' as (k x T) matrix.');
+                        u = u'; 
+                    end
+                    obj.d.u = size(u,1);
+                    obj.u   = u;
+                case 2
+                    C = arg{col};
+                    if size(C,2)==obj.d.x && size(C,1) ~= obj.d.x
+                        warning('C is not currently conformable to x, but C transpose is. I''ve corrected.');
+                        C = C'; 
+                    end
+                    obj.par.C = C;
+                case 3
+                    D = arg{col};
+                    if size(D,2)==obj.d.y && size(D,1) ~= obj.d.y
+                        warning('D is not currently conformable to y, but D transpose is. I''ve corrected.');
+                        D = D'; 
+                    end
+                    obj.par.D = D;
+                otherwise
+                    warning('Unimaginable issue in control argument processing. Hoper everything''s ok');
+                    fail = true;
+            end
+        end
+    end
+    
+    if fail
+        fail = false;
+        if any(sizes(:,1)==obj.d.T)
+            u     = arg{1};
+            if sizes(1,1) == obj.d.T && sizes(2,1) ~= obj.d.T
+                warning('in future please specify ''u'' as (k x T) matrix.');
+                u = u'; 
+            end
+            obj.u = u;
+            obj.d.u = size(u,1);
+        else
+            fail = true;
+        end
+            
+        if isempty(setdiff(sizes(:,2),[obj.d.x,obj.d.u]))
+            C = arg{2};
+            if sizes(1,2) ~= obj.d.x
+                warning('C is not currently conformable to x, but C transpose is. I''ve corrected.');
+                C = C'; 
+            end
+            obj.par.C = C;
+        elseif isempty(setdiff(sizes(:,2),[obj.d.y,obj.d.u]))
+            D = arg{2};
+            if sizes(1,2) ~= obj.d.y
+                warning('D is not currently conformable to y, but D transpose is. I''ve corrected.');
+                D = D'; 
+            end
+            obj.par.D = D;
+        else
+            fail = true;
+        end
+        
+        if nargs > 2
+            if isempty(setdiff(sizes(:,3),[obj.d.y,obj.d.u]))
+                D = arg{3};
+                if sizes(1,3) ~= obj.d.y
+                    warning('D is not currently conformable to y, but D transpose is. I''ve corrected.');
+                    D = D'; 
+                end
+                obj.par.D = D;
+            else
+                fail = true;
+            end
+        end
+    end
+    
+    if fail
+        error(['I''m not smart enough to parse your control inputs. Please ', ...
+                   'place them in order u, (C), (D).\n', ...
+               'If this message still persists, they are likely dimensionally inconsistent'],'')
+    end
+    
+    assert(~isempty(obj.u), 'Control args: u must be specified if C or D specified');
+    if ~isempty(obj.par.C)
+        assert(all(size(obj.par.C)==[obj.d.x,obj.d.u]), 'C is not conformable to both x and u');
+        obj.par.Cu = obj.par.C * obj.u;
+    end
+    if ~isempty(obj.par.D)
+        assert(all(size(obj.par.D)==[obj.d.y,obj.d.u]), 'D is not conformable to both y and u');
+        obj.par.Du = obj.par.D * obj.u;
+    end
+end
+
+
 
 function internalTestFun(f, nm, isDif, inputDim, outputDim)
     try

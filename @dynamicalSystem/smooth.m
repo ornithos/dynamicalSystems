@@ -60,9 +60,9 @@ function obj = smooth(obj, sType, utpar, opts)
     end
     
     % Check for existence of Filter
-    if ~opts.bIgnoreHash && ~strcmp(obj.infer.fpHash, obj.parameterHash)
+    if ~opts.bIgnoreHash && obj.parametersChanged
         fprintf('Filter not run or parameters changed. Rerunning filter...\n');
-        obj = obj.filter(sType, false, utpar, opts);
+        obj = obj.filter(inpFtype, false, utpar, opts);
     end
     
     %% Parameter setup

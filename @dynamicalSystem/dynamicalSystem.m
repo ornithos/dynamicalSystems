@@ -6,7 +6,9 @@ classdef dynamicalSystem
    % dynamicalSystem(dimx, dimy, 'evolution', {A || f || []}, {Df, Q}
    %                 'emission', {H || h || []}, {Dh, R},
    %                 'data', {y || T}, 'x0' {x0mu, x0cov}, 
-   %                 'xtrue', x, opts)
+   %                 ('xtrue', x),
+   %                 ('control', u, (C), (D)),
+   %                 opts)
    %
    % The string arguments can be redistributed as desired, but we assume
    % that they appear in this order for documentation. 
@@ -42,14 +44,23 @@ classdef dynamicalSystem
    % assumed 0)
    % - x0cov: the covariance of the prior over the latent space (required).
    %
+   % *** control *** (~~OPTIONAL~~)
+   % - u: the control inputs (in R^k) as a (T x k) matrix
+   % - C: (optional), the control matrix in the latent state
+   % - D: (optional), the control matrix in the emission (typically zero).
+   % Note that D may be specified without leaving a gap for C if it can be
+   % identified from its dimensionality.
+   %
    % *** OPTS ***  (~~OPTIONAL~~)
    % - A struct containing fields: warnings, verbose
+   % Note that no specifier is given in this case: the final field is 
+   % assumed to be opts if it is a struct.
    
    properties
       opts, stack = cell(100,2)
    end
    properties (SetAccess = protected)
-       x, y, d
+       x, y, d, u
        evoLinear = []
        evoNLhasParams = false
        emiLinear = []
@@ -59,7 +70,8 @@ classdef dynamicalSystem
        %  ___ Parameters ___
        par = struct('x0',struct,'A',[],'H',[],'Q',[],'R',[], ...
                       'f',[],'Df',[],'h',[],'Dh',[], ...
-                      'evoNLParams',struct,'emiNLParams',struct)
+                      'evoNLParams',struct,'emiNLParams',struct, ...
+                      'C',[],'D',[], 'Cu', [], 'Du', [])
        %  ___ Inference ___
        infer = struct('filter',[], 'smooth', [], 'llh', [], 'fType', [], ...
                       'sType', [], 'fpHash', [])
@@ -73,8 +85,8 @@ classdef dynamicalSystem
          if obj.evoLinear && obj.emiLinear
              if obj.validationInference(false)
                  fprintf('(%s) Running smoother for input parameters...  ', datestr(now, 'HH:MM:SS'));
-                 obj = obj.filterKalman;
-                 obj = obj.smoothLinear;
+                 obj = obj.filter('Kalman');
+                 obj = obj.smooth('Linear');
                  fprintf('Complete!\n');
                  obj = obj.save('initialised');
              else
@@ -251,6 +263,9 @@ classdef dynamicalSystem
    end
    
    methods (Access = protected, Hidden=true)
+       function b   = parametersChanged(obj)
+            b = strcmp(obj.infer.fpHash, obj.parameterHash);
+       end
        obj = parameterLearningMStep(obj, verbose, updateOnly); % internals for EM
        obj = validationInference(obj, doError); % Input validation
        obj = suffStats(obj, opts);  % Sufficient statistics required for learning
