@@ -50,19 +50,23 @@ function obj = smooth(obj, sType, utpar, opts)
     end
     
     bNumeric     = true;
-    inpFtype     = sType;
+    inpStype     = sType;
     sType        = utils.filterTypeLookup(sType, bNumeric) - 1;
     if sType == 0 && ~(obj.evoLinear && obj.emiLinear)
         error('Unable to perform linear inference in non-linear model');
     elseif sType>0 && obj.evoLinear && obj.emiLinear
         warning(['Model is linear: exact inference will be performed using ', ...
-                'RTS equations rather than %s type requested'], utils.filterTypeLookup(inpFtype));
+                'RTS equations rather than %s type requested'], utils.filterTypeLookup(inpStype));
     end
     
     % Check for existence of Filter
     if ~opts.bIgnoreHash && obj.parametersChanged
         fprintf('Filter not run or parameters changed. Rerunning filter...\n');
-        obj = obj.filter(inpFtype, false, utpar, opts);
+        obj = obj.filter(inpStype, false, utpar, opts);
+    end
+    if ~strcmpi(obj.infer.fType, inpStype) && ~(strcmp(obj.infer.fType, 'Kalman') || ...
+            sType==0)
+        warning('Different filter run to the specified smoother...\n');
     end
     
     %% Parameter setup
@@ -86,9 +90,15 @@ function obj = smooth(obj, sType, utpar, opts)
     
     for tt = (obj.d.T-1):-1:1
         % Prediction step
+        if any(obj.hasControl)
+            u_t = obj.u(:,tt);
+        else
+            u_t = [];
+        end
+        
         fP_tt           = fSigma{tt};
         fMu_tt          = fMu(:,tt);
-        [m_minus, P_minus, covttp1] = assumedDensityTform(parPredict, fMu_tt, fP_tt, fType1, utpar);
+        [m_minus, P_minus, covttp1] = utils.assumedDensityTform(parPredict, fMu_tt, fP_tt, u_t, fType1, utpar);
 
         % Smoothing step
         G               = covttp1 / (P_minus);
@@ -102,9 +112,10 @@ function obj = smooth(obj, sType, utpar, opts)
     end
     
     % x0 (purely to get G_0)
+    u_t             = zeros(obj.d.u,1);
     fMu_tt          = obj.par.x0.mu;
     fP_tt           = obj.par.x0.sigma;
-    [m_minus, P_minus, covttp1]  = assumedDensityTform(parPredict, fMu_tt, fP_tt, fType1, utpar);
+    [m_minus, P_minus, covttp1]  = utils.assumedDensityTform(parPredict, fMu_tt, fP_tt, u_t, fType1, utpar);
    
     G               = covttp1 / (P_minus);
     m               = obj.par.x0.mu + G * (m - m_minus);
@@ -115,52 +126,35 @@ function obj = smooth(obj, sType, utpar, opts)
     obj.infer.smooth.sigma = smoothSigma;
     obj.infer.smooth.G     = smoothG;
     obj.infer.smooth.x0    = struct('mu', m, 'sigma', P, 'G', G);
+    obj.infer.smooth.utpar = utpar;
     
-    obj.infer.sType        = 'UKF';
-end
-
-function [m, P, C] = assumedDensityTform(pars, m, P, type, utpar)
-    % stage = 1: Prediction step
-    % stage = 2: Update step
-
-    % type = 0: Kalman (Linear)
-    % type = 1: EKF
-    % type = 2: UKF
-    
-    switch type
-        case 0
-            m         = pars.A * m;
-            C         = P * pars.A';
-            P         = pars.A * P * pars.A' + pars.Q;
-        case 1
-            F         = pars.Df(m);
-            m         = pars.f(m);
-            C         = P * F';
-            P         = F * P * F' + pars.Q;
-        case 2
-            [m, P, C] = utils.unscentedTransform(pars.f, m, P, ...
-                            utpar.alpha, utpar.beta, utpar.kappa);
-            P         = P + pars.Q;
-        otherwise
-            error('Unknown assumed density type. Try 0=Kalman,1=EKF,2=UKF');
-    end
+    obj.infer.sType        = inpStype;
 end
 
 function par = getParams(obj, stage, type)
-    par = struct;
+    par = struct('control', false);
     [f,Df,h,Dh]    = obj.functionInterfaces;
     if stage == 1
             par.Q = obj.par.Q;
             if type == 0
                 par.A  = obj.par.A;
+                if obj.hasControl && ~isempty(obj.par.B)
+                    par.B = obj.par.B;
+                    par.control = true;
+                end
+                
             else
                 par.f  = f;
                 par.Df = Df;
             end
+            
         elseif stage == 2
             par.Q = obj.par.R;
             if type == 0
                 par.A = obj.par.H;
+                if obj.hasControl
+                    par.B = obj.par.C;
+                end
             else
                 par.f  = h;
                 par.Df = Dh;

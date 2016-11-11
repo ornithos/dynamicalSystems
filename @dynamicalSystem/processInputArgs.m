@@ -6,7 +6,8 @@ function obj = processInputArgs(obj, args)
    %                ('xtrue', x),
    %                ('control', u, B, (C))
    %                opts)
-   
+   % Note that opts is identified purely by whether the last argument is a
+   % struct. 
         nargs = numel(args);
          
         % update options
@@ -43,10 +44,10 @@ function obj = processInputArgs(obj, args)
             
             switch curSection
                 case 'evo'
-                    obj = internalProcessEvo(obj, args(ii:jj));
+                    [obj, testsEvo] = internalProcessEvo(obj, args(ii:jj));
                     trackDone(1) = true;
                 case 'emi'
-                    obj = internalProcessEmi(obj, args(ii:jj));
+                    [obj,testsEmi] = internalProcessEmi(obj, args(ii:jj));
                     trackDone(2) = true;
                 case 'x0 '
                     obj = internalProcessX0(obj, args(ii:jj));
@@ -59,8 +60,8 @@ function obj = processInputArgs(obj, args)
                     xtrue   = args{ii};
                     % optional: no trackDone
                 case 'con'
-                    isControl    = true;
                     controlStuff = args(ii:jj);
+                    isControl    = true;
                     % optional: no trackDone
                 otherwise
                     error('Unknown section marker ''%d''', curSection);
@@ -80,23 +81,54 @@ function obj = processInputArgs(obj, args)
             end
         end
         
-        obj      = internalProcessDat(obj, dataStuff);
+        %% This section processes arguments that have been seen already in
+        % the main loop above, but for reasons (usually involving the
+        % dimensionality of variables!), cannot be processed at the time.
         
-        obj.hasControl = isControl;
+        % process data
+        [obj, bGen]  = internalProcessDat(obj, dataStuff);
+        
+        % process control
         if isControl
             obj = internalProcessControl(obj, controlStuff);
         end
         
+        % test functions
+        for ii = 1:numel(testsEvo)
+            t = testsEvo{ii};
+            if obj.hasControl(1)
+                t(ones(obj.d.u,1));
+            else
+                t([]);
+            end
+        end
+        for ii = 1:numel(testsEmi)
+            t = testsEmi{ii};
+            if obj.hasControl(2)
+                t(ones(obj.d.u,1));
+            else
+                t([]);
+            end
+        end
+        
+        % data generation
+        if bGen
+            obj   = obj.generateData;
+        end
+        
+        % do X0
         if ~isempty(xtrue)
             assert(all(size(xtrue) == [obj.d.x, obj.d.T]), 'x must be matrix %d x %d', ...
                     obj.d.x, obj.d.T);
             obj.x = xtrue;
         end
         
+        % check we have everything
         allSects = {'evo', 'emi', 'x0 ', 'dat'};
         if ~all(trackDone)
             error('No arguments for sections: %s', strjoin(allSects(~trackDone), ','));
         end
+        
 end
 
 function arg = internalProcessChar(arg, ii, doWarning)
@@ -138,8 +170,9 @@ function obj = internalProcessX0(obj, arg)
     end
 end
 
-function obj = internalProcessEvo(obj, arg)
+function [obj, tests] = internalProcessEvo(obj, arg)
     nargs         = numel(arg);
+    tests         = {};
     obj.evoLinear = false;
     %{A || f || []}, {Df, Q}
     if isnumeric(arg{1})
@@ -153,7 +186,7 @@ function obj = internalProcessEvo(obj, arg)
         else
             f = obj.par.f;
         end
-        internalTestFun(f, 'f', false, obj.d.x, [obj.d.x,1]);
+        tests = {@(u) internalTestFun(f, 'f', u, false, obj.d.x, [obj.d.x,1])};
     else
         error('Unknown argument type (%s) in Evolution argument %d', class(arg{1}), 1);
     end
@@ -172,7 +205,7 @@ function obj = internalProcessEvo(obj, arg)
             else
                 f = obj.par.Df;
             end
-            internalTestFun(f, 'Df', true, obj.d.x, [obj.d.x, obj.d.x]);
+            tests{end+1} = @(u) internalTestFun(f, 'Df', u, true, obj.d.x, [obj.d.x, obj.d.x]);  %#ok
             exhaustFn = true;
         elseif isstruct(arg{ii})
             obj.evoNLParams = arg{ii};
@@ -187,9 +220,10 @@ function obj = internalProcessEvo(obj, arg)
     end
 end
             
-function obj = internalProcessEmi(obj, arg)
+function [obj,tests] = internalProcessEmi(obj, arg)
     nargs         = numel(arg);
     obj.emiLinear = false;
+    tests         = {};
     %{H || h || []}, {Dh, R},
     if isnumeric(arg{1})
         assert(all(size(arg{1})==[obj.d.y, obj.d.x]), 'matrix H is not conformable to dim(x), dim(y)');
@@ -202,7 +236,7 @@ function obj = internalProcessEmi(obj, arg)
         else
             f = obj.par.h;
         end
-        internalTestFun(f, 'h', false, obj.d.x, [obj.d.y,1]);
+        tests{end+1} = @(u) internalTestFun(f, 'h', u, false, obj.d.x, [obj.d.y,1]);
     else
         error('Unknown argument type (%s) in Emission argument %d', class(arg{1}), 1);
     end
@@ -221,7 +255,7 @@ function obj = internalProcessEmi(obj, arg)
             else
                 f = obj.par.Dh;
             end
-            internalTestFun(f, 'Dh', true, obj.d.x, [obj.d.y, obj.d.x]);
+            tests{end+1} = @(u) internalTestFun(f, 'Dh', u, true, obj.d.x, [obj.d.y, obj.d.x]); %#ok
         elseif isstruct(arg{ii})
             obj.par.emiNLParams = arg{ii};
             obj.emiNLhasParams = true;
@@ -234,8 +268,9 @@ function obj = internalProcessEmi(obj, arg)
     end
 end
 
-function obj = internalProcessDat(obj, arg)
+function [obj, doGenerate] = internalProcessDat(obj, arg)
     narg        = numel(arg);
+    doGenerate  = false;
     if narg > 2
         error('Too many data arguments. Should only be one: obs or number to generate');
     end
@@ -245,7 +280,7 @@ function obj = internalProcessDat(obj, arg)
     if utils.base.isscalarint(arg{1})
         obj.d.T = arg{1};
         assert(narg == 1, 'Too many data arguments');
-        obj   = obj.generateData;
+        doGenerate = true;
     else
         assert(isnumeric(arg{1}), 'observation data must be a scalar matrix');
         obj.y = arg{1};
@@ -280,8 +315,9 @@ function obj = internalProcessControl(obj, arg)
         warning('in future please specify ''u'' as (k x T) matrix.');
         u = u'; 
     end
-    assert(size(u,2)~=obj.d.T), 'u must have same length as emissions');
+    assert(size(u,2)==obj.d.T, 'u must have same length as emissions');
     obj.d.u = size(u,1);
+    obj.u   = u;
     
     for ii = 2:3
         % scalar input
@@ -329,9 +365,13 @@ end
 
 
 
-function internalTestFun(f, nm, isDif, inputDim, outputDim)
+function internalTestFun(f, nm, u, isDif, inputDim, outputDim)
     try
-        fRng = f(ones(inputDim,1));
+        if isempty(u)
+            fRng = f(ones(inputDim,1));
+        else
+            fRng = f(ones(inputDim,1), u);
+        end
     catch ME
         warning('Tried %s with input of ones(%d, 1). Output error message:\n', nm, inputDim);
         rethrow(ME);
@@ -341,7 +381,11 @@ function internalTestFun(f, nm, isDif, inputDim, outputDim)
     
     if ~isDif
         try
-            fRng = f(ones(inputDim,10));
+            if isempty(u)
+                fRng = f(ones(inputDim,10));
+            else
+                fRng = f(ones(inputDim,10), u);
+            end
         catch ME
             warning('Tried %s with matrix of ones(%d, 10). %s must be columnwise vectorised:\n', nm, inputDim);
             rethrow(ME);

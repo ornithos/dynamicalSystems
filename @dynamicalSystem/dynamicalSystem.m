@@ -22,12 +22,18 @@ classdef dynamicalSystem
    % interpreted as an unknown linear matrix which must be learned.
    % - a couple of optional arguments. Df = the derivative (Hessian) of f,
    % the evolution noise covariance Q (can be learned if not specified).
+   % - If f is parameterised, the parameters must be entered as a struct
+   % into f's final argument. This struct must precede the function handle
+   % in the dynamicalSystem inputs.
    %
    % *** EMISSION ***
    % - the first argument is the same as that of the evolution parameters,
    % corresponding to the emission linear/nonlinear function.
    % - a couple of optional arguments. Dh = the derivative (Hessian) of h,
    % the emission noise covariance R (can be learned if not specified).
+   % % - If h is parameterised, the parameters must be entered as a struct
+   % into h's final argument. This struct must precede the function handle
+   % in the dynamicalSystem inputs.
    %
    % *** DATA ***
    % - either a data matrix y corresponding to the observed data (each
@@ -65,7 +71,7 @@ classdef dynamicalSystem
        evoNLhasParams = false
        emiLinear = []
        emiNLhasParams = false
-       hasControl = false
+       hasControl = false(2,1);
        stackptr = 0
        % ----------------- Changeable:
        %  ___ Parameters ___
@@ -111,8 +117,10 @@ classdef dynamicalSystem
           transChol   = chol(obj.par.Q);
           emissChol   = chol(obj.par.R);
           for tt = 1:obj.d.T
-              obj.x(:,tt+1) = obj.doTransition(obj.x(:,tt)) + transChol * randn(obj.d.x,1);
-              obj.y(:,tt)   = obj.doEmission(obj.x(:,tt+1)) + emissChol * randn(obj.d.y,1);
+              u_t = [];
+              if any(obj.hasControl); u_t = obj.u(:,tt); end
+              obj.x(:,tt+1) = obj.doTransition(obj.x(:,tt), u_t) + transChol * randn(obj.d.x,1);
+              obj.y(:,tt)   = obj.doEmission(obj.x(:,tt+1), u_t) + emissChol * randn(obj.d.y,1);
           end
           obj.x       = obj.x(:,2:end);
       end
@@ -228,21 +236,44 @@ classdef dynamicalSystem
       function [fe, Dfe, he, Dhe] = functionInterfaces(obj)
         % non-linear wrappers for common interface to fns
         if obj.evoNLhasParams
-            fe = @(x) obj.par.f(x, obj.par.evoNLParams);
-            Dfe = @(x) obj.par.Df(x, obj.par.evoNLParams);
+            if obj.hasControl(1)
+                fe = @(x,u) obj.par.f(x, u, obj.par.evoNLParams);
+                Dfe = @(x,u) obj.par.Df(x, u, obj.par.evoNLParams);
+            else
+                fe = @(x,u) obj.par.f(x, obj.par.evoNLParams);
+                Dfe = @(x,u) obj.par.Df(x, obj.par.evoNLParams);
+            end
         else
-            fe = obj.par.f;
-            Dfe = obj.par.Df;
+            if obj.hasControl(1)
+                fe = @(x,u) obj.par.f(x,u);
+                Dfe = @(x,u) obj.par.Df(x,u);
+            else
+                fe = @(x,u) obj.par.f(x);
+                Dfe = @(x,u) obj.par.Df(x);
+            end
         end
         if obj.emiNLhasParams
-            he = @(x) obj.par.h(x, obj.par.emiNLParams);
-            Dhe = @(x) obj.par.Dh(x, obj.par.emiNLParams);
+            if obj.hasControl(2)
+                he = @(x,u) obj.par.h(x, u, obj.par.emiNLParams);
+                Dhe = @(x,u) obj.par.Dh(x, u, obj.par.emiNLParams);
+            else
+                he = @(x) obj.par.h(x, obj.par.emiNLParams);
+                Dhe = @(x) obj.par.Dh(x, obj.par.emiNLParams);
+            end
         else
-            he = obj.par.h;
-            Dhe = obj.par.Dh;
+            if obj.hasControl(2)
+                he = @(x,u) obj.par.h(x,u);
+                Dhe = @(x,u) obj.par.Dh(x,u);
+            else
+                he = @(x,u) obj.par.h(x);
+                Dhe = @(x,u) obj.par.Dh(x);
+            end
         end
       end
       
+      function b   = parametersChanged(obj)
+            b = ~strcmp(obj.infer.fpHash, obj.parameterHash);
+      end
       % --- prototypes -------------------
       % inference / learning 
       obj = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
@@ -264,9 +295,6 @@ classdef dynamicalSystem
    end
    
    methods (Access = protected, Hidden=true)
-       function b   = parametersChanged(obj)
-            b = strcmp(obj.infer.fpHash, obj.parameterHash);
-       end
        obj = parameterLearningMStep(obj, verbose, updateOnly); % internals for EM
        obj = validationInference(obj, doError); % Input validation
        obj = suffStats(obj, opts);  % Sufficient statistics required for learning
@@ -275,26 +303,21 @@ classdef dynamicalSystem
    methods (Access = private)
 
        % ---- Dynamics wrappers --------------------------
-        function out = doTransition(obj, input)
+        function out = doTransition(obj, input, u)
+           
             if obj.evoLinear
-                  out = obj.par.A * input;
+                  out        = obj.par.A * input;
             else
-                if ~obj.evoNLhasParams
-                    out = obj.par.f(input);
-                else
-                    out = obj.par.f(input, obj.par.evoNLParams);
-                end
+                [f,~,~,~]    = obj.functionInterfaces;
+                out          = f(input, u);
             end
         end
-        function out = doEmission(obj, input)
+        function out = doEmission(obj, input, u)
             if obj.emiLinear
-                  out = obj.par.H * input;
+                 out = obj.par.H * input;
             else
-                if ~obj.emiNLhasParams
-                    out = obj.par.h(input);
-                else
-                    out = obj.par.h(input, obj.par.emiNLParams);
-                end
+                [~,~,h,~]    = obj.functionInterfaces;
+                out          = h(input, u);
             end
         end
         % ------------------------------------------------

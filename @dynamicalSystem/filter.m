@@ -74,6 +74,7 @@ function obj = filter(obj, fType, bDoLLH, utpar, opts)
     
     filterMu        = zeros(obj.d.x, obj.d.T);
     filterSigma     = cell(obj.d.T, 1);
+    
     % initialise t-1 = 0 values to prior
     m               = obj.par.x0.mu;
     P               = obj.par.x0.sigma;
@@ -82,10 +83,15 @@ function obj = filter(obj, fType, bDoLLH, utpar, opts)
     
     for tt = 1:obj.d.T
         % Prediction step
-        [m_minus, P_minus, ~] = assumedDensityTform(parPredict, m, P, fType1, utpar);
+        if any(obj.hasControl)
+            u_t = obj.u(:,tt);
+        else
+            u_t = [];
+        end
+        [m_minus, P_minus, ~] = utils.assumedDensityTform(parPredict, m, P, u_t, fType1, utpar);
 
         % Filter step
-        [m_y, S, covxy]   = assumedDensityTform(parUpdate, m_minus, P_minus, fType2, utpar);
+        [m_y, S, covxy]   = utils.assumedDensityTform(parUpdate, m_minus, P_minus, u_t, fType2, utpar);
         [Sinv, lam]       = utils.math.pinvAndEig(S, 1e-12);
         K                 = covxy * Sinv;
         deltaY            = obj.y(:,tt) - m_y;
@@ -107,51 +113,35 @@ function obj = filter(obj, fType, bDoLLH, utpar, opts)
     obj.infer.llh            = NaN;
     if bDoLLH; obj.infer.llh = llh; end
     if ~opts.bIgnoreHash; obj.infer.fpHash = obj.parameterHash; end
-    obj.infer.fType          = fType;
-end
-
-function [m, P, C] = assumedDensityTform(pars, m, P, type, utpar)
-    % stage = 1: Prediction step
-    % stage = 2: Update step
-
-    % type = 0: Kalman (Linear)
-    % type = 1: EKF
-    % type = 2: UKF
-    
-    switch type
-        case 0
-            m         = pars.A * m;
-            C         = P * pars.A';
-            P         = pars.A * P * pars.A' + pars.Q;
-        case 1
-            F         = pars.Df(m);
-            m         = pars.f(m);
-            C         = P * F';
-            P         = F * P * F' + pars.Q;
-        case 2
-            [m, P, C] = utils.unscentedTransform(pars.f, m, P, ...
-                            utpar.alpha, utpar.beta, utpar.kappa);
-            P         = P + pars.Q;
-        otherwise
-            error('Unknown assumed density type. Try 0=Kalman,1=EKF,2=UKF');
-    end
+    obj.infer.fType          = inpFtype;
+    obj.infer.sType          = '';
+    obj.infer.filter.utpar   = utpar;
 end
 
 function par = getParams(obj, stage, type)
-    par = struct;
+    par = struct('control', false);
     [f,Df,h,Dh]    = obj.functionInterfaces;
     if stage == 1
             par.Q = obj.par.Q;
             if type == 0
                 par.A  = obj.par.A;
+                if obj.hasControl && ~isempty(obj.par.B)
+                    par.B = obj.par.B;
+                    par.control = true;
+                end
+                
             else
                 par.f  = f;
                 par.Df = Df;
             end
+            
         elseif stage == 2
             par.Q = obj.par.R;
             if type == 0
                 par.A = obj.par.H;
+                if obj.hasControl
+                    par.B = obj.par.C;
+                end
             else
                 par.f  = h;
                 par.Df = Dh;

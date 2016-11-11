@@ -53,14 +53,7 @@ function D = getGradient(obj, par, doCheck)
             checkGrad(obj, 'R', D.R, doCheck-1);
         end
     end
-    
-%     % check against numerical gradient
-%     if doCheck
-%         checkGrad(obj, 'A', D.A);
-%         checkGrad(obj, 'Q', D.Q);
-%         checkGrad(obj, 'H', D.H);
-%         checkGrad(obj, 'R', D.R);
-%     end
+
 end
 
 

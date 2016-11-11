@@ -99,39 +99,75 @@ handles.sp{1}.infer.smooth.yhatSigma = cell(size(dsobj.y, 2),1);
 handles.sp{2}.infer.smooth.yhatSigma = cell(size(dsobj.y, 2),1);
 
 [~, ~, h, Dh] = dsobj.functionInterfaces;
+handles.sp{1}.par.h       = h;
+handles.sp{2}.par.h       = h;
+handles.sp{1}.par.Dh      = Dh;
+handles.sp{2}.par.Dh      = Dh;
 
-for tt = 1:dsobj.d.T
-    if dsobj.emiLinear
-        % transform posterior mean into observation space
-        handles.yhat(:,tt) = dsobj.par.H * dsobj.x(:,tt);
-        handles.sp{1}.infer.filter.yhat(:,tt) = dsobj.par.H * handles.sp{1}.infer.filter.mu(:,tt);
-        handles.sp{2}.infer.filter.yhat(:,tt) = dsobj.par.H * handles.sp{2}.infer.filter.mu(:,tt);
-        handles.sp{1}.infer.smooth.yhat(:,tt) = dsobj.par.H * handles.sp{1}.infer.smooth.mu(:,tt);
-        handles.sp{2}.infer.smooth.yhat(:,tt) = dsobj.par.H * handles.sp{2}.infer.smooth.mu(:,tt);
-        
-        % transformed covariances into observation space
-        handles.sp{1}.infer.filter.yhatSigma{tt} = dsobj.par.H * handles.sp{1}.infer.filter.sigma{tt} * dsobj.par.H' + dsobj.par.R;
-        handles.sp{2}.infer.filter.yhatSigma{tt} = dsobj.par.H * handles.sp{2}.infer.filter.sigma{tt} * dsobj.par.H' + dsobj.par.R;
-        handles.sp{1}.infer.smooth.yhatSigma{tt} = dsobj.par.H * handles.sp{1}.infer.smooth.sigma{tt} * dsobj.par.H' + dsobj.par.R;
-        handles.sp{2}.infer.smooth.yhatSigma{tt} = dsobj.par.H * handles.sp{2}.infer.smooth.sigma{tt} * dsobj.par.H' + dsobj.par.R;
-    else
-        % transform posterior mean into observation space
-        handles.yhat(:,tt) = dsobj.par.h(dsobj.x(:,tt));
-        handles.sp{1}.infer.filter.yhat(:,tt) = h(handles.sp{1}.infer.filter.mu(:,tt));
-        handles.sp{2}.infer.filter.yhat(:,tt) = h(handles.sp{2}.infer.filter.mu(:,tt));
-        handles.sp{1}.infer.smooth.yhat(:,tt) = h(handles.sp{1}.infer.smooth.mu(:,tt));
-        handles.sp{2}.infer.smooth.yhat(:,tt) = h(handles.sp{2}.infer.smooth.mu(:,tt));
-        
-        % transformed covariances into observation space
-        H               = Dh(dsobj.par.h(handles.sp{1}.infer.filter.mu(:,tt)));
-        handles.sp{1}.infer.filter.yhatSigma{tt} = H * handles.sp{1}.infer.filter.sigma{tt} * H' + dsobj.par.R;
-        H               = Dh(dsobj.par.h(handles.sp{2}.infer.filter.mu(:,tt)));
-        handles.sp{2}.infer.filter.yhatSigma{tt} = H * handles.sp{2}.infer.filter.sigma{tt} * H' + dsobj.par.R;
-        H               = Dh(dsobj.par.h(handles.sp{1}.infer.smooth.mu(:,tt)));
-        handles.sp{1}.infer.smooth.yhatSigma{tt} = H * handles.sp{1}.infer.smooth.sigma{tt} * H' + dsobj.par.R;
-        H               = Dh(dsobj.par.h(handles.sp{2}.infer.smooth.mu(:,tt)));
-        handles.sp{2}.infer.smooth.yhatSigma{tt} = H * handles.sp{2}.infer.smooth.sigma{tt} * H' + dsobj.par.R;
+% find assumed density type
+F_S    = {'filter','smooth'};
+ftypes = NaN(2,2);
+utpars = cell(2,2);
+for jj = 1:2
+    ftypes(jj,1) = utils.filterTypeLookup(handles.sp{jj}.infer.fType, true) - 1;
+    if ~isempty(handles.sp{jj}.infer.sType)
+        ftypes(jj,2) = utils.filterTypeLookup(handles.sp{jj}.infer.sType, true) - 1;
     end
+    
+    if ftypes(jj,1) == 2
+        utpars{jj,1} = handles.sp{jj}.infer.filter.utpar;
+    end
+    if ftypes(jj,2) == 2
+        utpars{jj,2} = handles.sp{jj}.infer.smooth.utpar;
+    end
+end
+
+% perform transformation
+for tt = 1:dsobj.d.T
+    if any(dsobj.hasControl)
+        u_t = dsobj.u(:,tt);
+    else
+        u_t = [];
+    end
+%     if dsobj.emiLinear
+%         % transform posterior mean into observation space
+%         handles.yhat(:,tt) = dsobj.par.H * dsobj.x(:,tt);
+%         handles.sp{1}.infer.filter.yhat(:,tt) = dsobj.par.H * handles.sp{1}.infer.filter.mu(:,tt);
+%         handles.sp{2}.infer.filter.yhat(:,tt) = dsobj.par.H * handles.sp{2}.infer.filter.mu(:,tt);
+%         handles.sp{1}.infer.smooth.yhat(:,tt) = dsobj.par.H * handles.sp{1}.infer.smooth.mu(:,tt);
+%         handles.sp{2}.infer.smooth.yhat(:,tt) = dsobj.par.H * handles.sp{2}.infer.smooth.mu(:,tt);
+%         
+%         % transformed covariances into observation space
+%         handles.sp{1}.infer.filter.yhatSigma{tt} = dsobj.par.H * handles.sp{1}.infer.filter.sigma{tt} * dsobj.par.H' + dsobj.par.R;
+%         handles.sp{2}.infer.filter.yhatSigma{tt} = dsobj.par.H * handles.sp{2}.infer.filter.sigma{tt} * dsobj.par.H' + dsobj.par.R;
+%         handles.sp{1}.infer.smooth.yhatSigma{tt} = dsobj.par.H * handles.sp{1}.infer.smooth.sigma{tt} * dsobj.par.H' + dsobj.par.R;
+%         handles.sp{2}.infer.smooth.yhatSigma{tt} = dsobj.par.H * handles.sp{2}.infer.smooth.sigma{tt} * dsobj.par.H' + dsobj.par.R;
+%     else
+        % transform posterior mean into observation space
+        handles.yhat(:,tt) = h(dsobj.x(:,tt), u_t);
+        for jj = 1:2
+            for kk = 1:2
+                % filter
+                m_x           = handles.sp{jj}.infer.(F_S{kk}).mu(:,tt);
+                P_x           = handles.sp{jj}.infer.(F_S{kk}).sigma{tt};
+                pars          = getParams(handles.sp{jj}, 2, ftypes(jj,1));
+                [m_tt,P_tt,~] = utils.assumedDensityTform(pars, m_x, P_x, u_t, ftypes(jj,1), utpars{jj,1});
+                handles.sp{jj}.infer.(F_S{kk}).yhat(:,tt) = m_tt;
+                handles.sp{jj}.infer.(F_S{kk}).yhatSigma{tt} = P_tt;
+            end
+            
+        end
+        
+        % transformed covariances into observation space
+%         H               = Dh(dsobj.par.h(handles.sp{1}.infer.filter.mu(:,tt)));
+%         handles.sp{1}.infer.filter.yhatSigma{tt} = H * handles.sp{1}.infer.filter.sigma{tt} * H' + dsobj.par.R;
+%         H               = Dh(dsobj.par.h(handles.sp{2}.infer.filter.mu(:,tt)));
+%         handles.sp{2}.infer.filter.yhatSigma{tt} = H * handles.sp{2}.infer.filter.sigma{tt} * H' + dsobj.par.R;
+%         H               = Dh(dsobj.par.h(handles.sp{1}.infer.smooth.mu(:,tt)));
+%         handles.sp{1}.infer.smooth.yhatSigma{tt} = H * handles.sp{1}.infer.smooth.sigma{tt} * H' + dsobj.par.R;
+%         H               = Dh(dsobj.par.h(handles.sp{2}.infer.smooth.mu(:,tt)));
+%         handles.sp{2}.infer.smooth.yhatSigma{tt} = H * handles.sp{2}.infer.smooth.sigma{tt} * H' + dsobj.par.R;
+%     end
 end
 
 %% Cut down to 2D for visualisation
@@ -374,3 +410,35 @@ end
 set(hObject, 'Value', handles.pSeries2 + 1 + handles.sp2_2*2);
 doPlot(hObject, eventdata, handles);
 guidata(hObject, handles);
+
+
+function par = getParams(obj, stage, type)
+    par = struct('control', false);
+    if stage == 1
+            par.Q = obj.par.Q;
+            if type == 0
+                par.A  = obj.par.A;
+                if obj.hasControl && ~isempty(obj.par.B)
+                    par.B = obj.par.B;
+                    par.control = true;
+                end
+                
+            else
+                par.f  = obj.par.f;
+                par.Df = obj.par.Df;
+            end
+            
+        elseif stage == 2
+            par.Q = obj.par.R;
+            if type == 0
+                par.A = obj.par.H;
+                if obj.hasControl
+                    par.B = obj.par.C;
+                end
+            else
+                par.f  = obj.par.h;
+                par.Df = obj.par.Dh;
+            end
+        else
+            error('Unknown stage requested. Try 1=prediction or 2=update');
+    end
