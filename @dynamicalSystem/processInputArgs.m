@@ -268,139 +268,63 @@ end
 
 function obj = internalProcessControl(obj, arg)
     nargs       = numel(arg);
-    if nargs < 2 || nargs > 3
-        error('control must have 2 or 3 arguments: (u, B) or (u,B,C)');
+    if nargs < 3 || nargs > 3
+        error('control must have 3 arguments: (u,B,C)');
     end
     
-    sizes = zeros(2,nargs);
-    for ii = 1:nargs
-        assert(isnumeric(arg{ii}) && ismatrix(arg{ii}), 'control input %d must be numeric matrix', ii);
-        sizes(:,ii) = size(arg{ii});
-    end
+    sizes = zeros(2,3);
     
-    % rows 1 = u, 2 = B, 3 = C
-    possible = [any(sizes == obj.d.T); any(sizes == obj.d.x); any(sizes == obj.d.y)];
-    bad      = sum(possible)==0 & sum(sizes)>0;
-    if any(bad)
-        error(['Argument(s) %s in control are not conformable to time series length T=%d, ', ...
-               'latent dim n=%d, or observed dim d=%d. Unable to process them.'], ...
-               utils.base.numjoin(find(bad),','), obj.d.T, obj.d.x, obj.d.y); %#ok
+    % control inputs
+    u = arg{1};
+    if size(u,1)==obj.d.T && size(u,2) ~= obj.d.T
+        warning('in future please specify ''u'' as (k x T) matrix.');
+        u = u'; 
     end
+    assert(size(u,2)~=obj.d.T), 'u must have same length as emissions');
+    obj.d.u = size(u,1);
     
-    % ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ %
-    % absurdly complex logic here to enable users to specify u, B, C in
-    % almost any order without failure. I started so I finished. I
-    % shouldn't have started. And I'm sure it's not foolproof.
-    fail = false;
-    for ii = 1:nargs
-        if isempty(arg{ii})
-            if ii == 1
-                error('First control argument should be u: cannot be empty');
-            elseif ii == 2
-                obj.par.B = zeros(obj.d.x, obj.d.u);
-                continue
-            elseif ii == 3
-                obj.par.C = zeros(obj.d.y, obj.d.u);
-                continue
+    for ii = 2:3
+        % scalar input
+        if (islogical(arg{ii}) || isempty(arg{ii})) && isscalar(arg{ii})
+            tmp = arg{ii};
+            if isempty(tmp); tmp = false; end
+            obj.hasControl(ii-1) = tmp;
+            if tmp && ii == 2 
+                if obj.evoLinear
+                    obj.par.B = zeros(obj.d.x,obj.d.u);
+                end
+            elseif tmp && ii == 3
+                if obj.emiLinear
+                    obj.par.C = zeros(obj.d.y,obj.d.u);
+                end
             end
-        end
-        rowtotals = sum(possible, 2);
-        row       = find(rowtotals == 1, 1);
-        if isempty(row)
-            fail = true;
-            break
-        else
-            col      = find(possible(row,:));
-            possible(:,col) = zeros(3,1);
-            switch row
-                case 1
-                    u = arg{col};
-                    if size(u,1)==obj.d.T && size(u,2) ~= obj.d.T
-                        warning('in future please specify ''u'' as (k x T) matrix.');
-                        u = u'; 
-                    end
-                    obj.d.u = size(u,1);
-                    obj.u   = u;
-                case 2
-                    B = arg{col};
-                    if size(B,2)==obj.d.x && size(B,1) ~= obj.d.x
-                        warning('B is not currently conformable to x, but B transpose is. I''ve corrected.');
-                        B = B'; 
-                    end
-                    obj.par.B = B;
-                case 3
-                    C = arg{col};
-                    if size(C,2)==obj.d.y && size(C,1) ~= obj.d.y
-                        warning('C is not currently conformable to y, but C transpose is. I''ve corrected.');
-                        C = C'; 
-                    end
-                    obj.par.C = C;
-                otherwise
-                    warning('Unimaginable issue in control argument processing. Hoper everything''s ok');
-                    fail = true;
-            end
-        end
-    end
-    
-    if fail
-        fail = false;
-        if any(sizes(:,1)==obj.d.T)
-            u     = arg{1};
-            if sizes(1,1) == obj.d.T && sizes(2,1) ~= obj.d.T
-                warning('in future please specify ''u'' as (k x T) matrix.');
-                u = u'; 
-            end
-            obj.u = u;
-            obj.d.u = size(u,1);
-        else
-            fail = true;
-        end
             
-        if isempty(setdiff(sizes(:,2),[obj.d.x,obj.d.u]))
-            B = arg{2};
-            if sizes(1,2) ~= obj.d.x
-                warning('B is not currently conformable to x, but B transpose is. I''ve corrected.');
-                B = B'; 
-            end
-            obj.par.B = B;
-        elseif isempty(setdiff(sizes(:,2),[obj.d.y,obj.d.u]))
-            C = arg{2};
-            if sizes(1,2) ~= obj.d.y
-                warning('C is not currently conformable to y, but C transpose is. I''ve corrected.');
-                C = C'; 
-            end
-            obj.par.C = C;
-        else
-            fail = true;
-        end
-        
-        if nargs > 2
-            if isempty(setdiff(sizes(:,3),[obj.d.y,obj.d.u]))
-                C = arg{3};
-                if sizes(1,3) ~= obj.d.y
-                    warning('C is not currently conformable to y, but C transpose is. I''ve corrected.');
+        % matrix input
+        elseif isnumeric(arg{ii}) && ismatrix(arg{ii})
+            obj.hasControl(ii-1) = true;
+            if ii == 2
+                B = arg{ii};
+                if size(B,2)==obj.d.x && size(B,1) ~= obj.d.x
+                    warning('B is not currently conformable to x, but B transpose is. I''ve corrected.');
+                    B = B'; 
+                end
+                obj.par.B = B;
+                assert(all(size(obj.par.B)==[obj.d.x,obj.d.u]), 'B is not conformable to both x and u');
+            elseif ii == 3
+                C = arg{ii};
+                if size(C,2)==obj.d.y && size(C,1) ~= obj.d.y
+                    warning('C is not currently conformable to x, but C transpose is. I''ve corrected.');
                     C = C'; 
                 end
                 obj.par.C = C;
-            else
-                fail = true;
+                assert(all(size(obj.par.C)==[obj.d.y,obj.d.u]), 'C is not conformable to both y and u');
             end
+        else
+            error('control input %d must be numeric matrix or scalar logical', ii);
         end
     end
     
-    if fail
-        error(['I''m not smart enough to parse your control inputs. Please ', ...
-                   'place them in order u, (B), (C).\n', ...
-               'If this message still persists, they are likely dimensionally inconsistent'],'')
-    end
-    
-    assert(~isempty(obj.u), 'Control args: u must be specified if B or C specified');
-    if ~isempty(obj.par.B)
-        assert(all(size(obj.par.B)==[obj.d.x,obj.d.u]), 'B is not conformable to both x and u');
-    end
-    if ~isempty(obj.par.C)
-        assert(all(size(obj.par.C)==[obj.d.y,obj.d.u]), 'C is not conformable to both y and u');
-    end
+   
 end
 
 
