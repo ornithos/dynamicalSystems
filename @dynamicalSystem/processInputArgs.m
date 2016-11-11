@@ -4,7 +4,7 @@ function obj = processInputArgs(obj, args)
    %                 'data', {y || T},
    %                 'x0', {P0 || p0}, (m0),
    %                ('xtrue', x),
-   %                ('control', u, C, (D))
+   %                ('control', u, B, (C))
    %                opts)
    
         nargs = numel(args);
@@ -82,8 +82,7 @@ function obj = processInputArgs(obj, args)
         
         obj      = internalProcessDat(obj, dataStuff);
         
-        obj.par.Cu = zeros(obj.d.x, obj.d.T);
-        obj.par.Du = zeros(obj.d.y, obj.d.T);
+        obj.hasControl = isControl;
         if isControl
             obj = internalProcessControl(obj, controlStuff);
         end
@@ -270,7 +269,7 @@ end
 function obj = internalProcessControl(obj, arg)
     nargs       = numel(arg);
     if nargs < 2 || nargs > 3
-        error('control must have 2 or 3 arguments: (u, C) or (u,C,D)');
+        error('control must have 2 or 3 arguments: (u, B) or (u,B,C)');
     end
     
     sizes = zeros(2,nargs);
@@ -279,7 +278,7 @@ function obj = internalProcessControl(obj, arg)
         sizes(:,ii) = size(arg{ii});
     end
     
-    % rows 1 = u, 2 = C, 3 = D
+    % rows 1 = u, 2 = B, 3 = C
     possible = [any(sizes == obj.d.T); any(sizes == obj.d.x); any(sizes == obj.d.y)];
     bad      = sum(possible)==0 & sum(sizes)>0;
     if any(bad)
@@ -289,7 +288,7 @@ function obj = internalProcessControl(obj, arg)
     end
     
     % ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ %
-    % absurdly complex logic here to enable users to specify u, C, D in
+    % absurdly complex logic here to enable users to specify u, B, C in
     % almost any order without failure. I started so I finished. I
     % shouldn't have started. And I'm sure it's not foolproof.
     fail = false;
@@ -298,10 +297,10 @@ function obj = internalProcessControl(obj, arg)
             if ii == 1
                 error('First control argument should be u: cannot be empty');
             elseif ii == 2
-                obj.par.C = zeros(obj.d.x, obj.d.u);
+                obj.par.B = zeros(obj.d.x, obj.d.u);
                 continue
             elseif ii == 3
-                obj.par.D = zeros(obj.d.y, obj.d.u);
+                obj.par.C = zeros(obj.d.y, obj.d.u);
                 continue
             end
         end
@@ -323,19 +322,19 @@ function obj = internalProcessControl(obj, arg)
                     obj.d.u = size(u,1);
                     obj.u   = u;
                 case 2
+                    B = arg{col};
+                    if size(B,2)==obj.d.x && size(B,1) ~= obj.d.x
+                        warning('B is not currently conformable to x, but B transpose is. I''ve corrected.');
+                        B = B'; 
+                    end
+                    obj.par.B = B;
+                case 3
                     C = arg{col};
-                    if size(C,2)==obj.d.x && size(C,1) ~= obj.d.x
-                        warning('C is not currently conformable to x, but C transpose is. I''ve corrected.');
+                    if size(C,2)==obj.d.y && size(C,1) ~= obj.d.y
+                        warning('C is not currently conformable to y, but C transpose is. I''ve corrected.');
                         C = C'; 
                     end
                     obj.par.C = C;
-                case 3
-                    D = arg{col};
-                    if size(D,2)==obj.d.y && size(D,1) ~= obj.d.y
-                        warning('D is not currently conformable to y, but D transpose is. I''ve corrected.');
-                        D = D'; 
-                    end
-                    obj.par.D = D;
                 otherwise
                     warning('Unimaginable issue in control argument processing. Hoper everything''s ok');
                     fail = true;
@@ -358,31 +357,31 @@ function obj = internalProcessControl(obj, arg)
         end
             
         if isempty(setdiff(sizes(:,2),[obj.d.x,obj.d.u]))
-            C = arg{2};
+            B = arg{2};
             if sizes(1,2) ~= obj.d.x
-                warning('C is not currently conformable to x, but C transpose is. I''ve corrected.');
+                warning('B is not currently conformable to x, but B transpose is. I''ve corrected.');
+                B = B'; 
+            end
+            obj.par.B = B;
+        elseif isempty(setdiff(sizes(:,2),[obj.d.y,obj.d.u]))
+            C = arg{2};
+            if sizes(1,2) ~= obj.d.y
+                warning('C is not currently conformable to y, but C transpose is. I''ve corrected.');
                 C = C'; 
             end
             obj.par.C = C;
-        elseif isempty(setdiff(sizes(:,2),[obj.d.y,obj.d.u]))
-            D = arg{2};
-            if sizes(1,2) ~= obj.d.y
-                warning('D is not currently conformable to y, but D transpose is. I''ve corrected.');
-                D = D'; 
-            end
-            obj.par.D = D;
         else
             fail = true;
         end
         
         if nargs > 2
             if isempty(setdiff(sizes(:,3),[obj.d.y,obj.d.u]))
-                D = arg{3};
+                C = arg{3};
                 if sizes(1,3) ~= obj.d.y
-                    warning('D is not currently conformable to y, but D transpose is. I''ve corrected.');
-                    D = D'; 
+                    warning('C is not currently conformable to y, but C transpose is. I''ve corrected.');
+                    C = C'; 
                 end
-                obj.par.D = D;
+                obj.par.C = C;
             else
                 fail = true;
             end
@@ -391,18 +390,16 @@ function obj = internalProcessControl(obj, arg)
     
     if fail
         error(['I''m not smart enough to parse your control inputs. Please ', ...
-                   'place them in order u, (C), (D).\n', ...
+                   'place them in order u, (B), (C).\n', ...
                'If this message still persists, they are likely dimensionally inconsistent'],'')
     end
     
-    assert(~isempty(obj.u), 'Control args: u must be specified if C or D specified');
-    if ~isempty(obj.par.C)
-        assert(all(size(obj.par.C)==[obj.d.x,obj.d.u]), 'C is not conformable to both x and u');
-        obj.par.Cu = obj.par.C * obj.u;
+    assert(~isempty(obj.u), 'Control args: u must be specified if B or C specified');
+    if ~isempty(obj.par.B)
+        assert(all(size(obj.par.B)==[obj.d.x,obj.d.u]), 'B is not conformable to both x and u');
     end
-    if ~isempty(obj.par.D)
-        assert(all(size(obj.par.D)==[obj.d.y,obj.d.u]), 'D is not conformable to both y and u');
-        obj.par.Du = obj.par.D * obj.u;
+    if ~isempty(obj.par.C)
+        assert(all(size(obj.par.C)==[obj.d.y,obj.d.u]), 'C is not conformable to both y and u');
     end
 end
 

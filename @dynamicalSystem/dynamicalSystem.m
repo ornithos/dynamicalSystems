@@ -65,13 +65,14 @@ classdef dynamicalSystem
        evoNLhasParams = false
        emiLinear = []
        emiNLhasParams = false
+       hasControl = false
        stackptr = 0
        % ----------------- Changeable:
        %  ___ Parameters ___
        par = struct('x0',struct,'A',[],'H',[],'Q',[],'R',[], ...
                       'f',[],'Df',[],'h',[],'Dh',[], ...
                       'evoNLParams',struct,'emiNLParams',struct, ...
-                      'C',[],'D',[], 'Cu', [], 'Du', [])
+                      'B',[],'C',[], 'Cu', [], 'Du', [])
        %  ___ Inference ___
        infer = struct('filter',[], 'smooth', [], 'llh', [], 'fType', [], ...
                       'sType', [], 'fpHash', [])
