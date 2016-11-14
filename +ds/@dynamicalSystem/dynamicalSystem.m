@@ -211,8 +211,10 @@ classdef dynamicalSystem
               if obj.opts.warnings; warning('posterior does not match current parameters'); end
               if obj.evoLinear && obj.emiLinear
                   fprintf('(%s) Running posterior...\n', datestr(now, 'HH:MM:SS'));
-                  obj = obj.filterKalman;
-                  obj = obj.smoothLinear;
+                  ftype = obj.infer.fType;
+                  stype = obj.infer.sType;
+                  obj = obj.filter(ftype);
+                  obj = obj.smooth(stype);
               else
                   error('Unable to save: posterior does not match parameters. Please run a posterior algm');
               end

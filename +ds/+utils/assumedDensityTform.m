@@ -19,7 +19,6 @@ function [m, P, C] = assumedDensityTform(pars, m, P, u, type, utpar)
             else
                 m = pars.A * m + pars.B * u;
             end
-            m         = pars.A * m;
             C         = P * pars.A';
             P         = pars.A * P * pars.A' + pars.Q;
         case 1
@@ -29,7 +28,7 @@ function [m, P, C] = assumedDensityTform(pars, m, P, u, type, utpar)
             P         = F * P * F' + pars.Q;
         case 2
             f         = @(x) pars.f(x,repmat(u, 1, 2*numel(m)+1));
-            [m, P, C] = utils.unscentedTransform(f, m, P, ...
+            [m, P, C] = ds.utils.unscentedTransform(f, m, P, ...
                             utpar.alpha, utpar.beta, utpar.kappa);
             P         = P + pars.Q;
         otherwise

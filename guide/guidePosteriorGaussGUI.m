@@ -60,7 +60,7 @@ if isempty(varargin)
 end
 
 dsobj = varargin{1};
-assert(isa(dsobj, 'dynamicalSystem'), 'input is not a dynamicalSystems object!');
+assert(isa(dsobj, 'ds.dynamicalSystem'), 'input is not a dynamicalSystems object!');
 sp1   = varargin{2};
 sp2   = varargin{3};
 
@@ -109,9 +109,9 @@ F_S    = {'filter','smooth'};
 ftypes = NaN(2,2);
 utpars = cell(2,2);
 for jj = 1:2
-    ftypes(jj,1) = utils.filterTypeLookup(handles.sp{jj}.infer.fType, true) - 1;
+    ftypes(jj,1) = ds.utils.filterTypeLookup(handles.sp{jj}.infer.fType, true) - 1;
     if ~isempty(handles.sp{jj}.infer.sType)
-        ftypes(jj,2) = utils.filterTypeLookup(handles.sp{jj}.infer.sType, true) - 1;
+        ftypes(jj,2) = ds.utils.filterTypeLookup(handles.sp{jj}.infer.sType, true) - 1;
     end
     
     if ftypes(jj,1) == 2
@@ -144,14 +144,18 @@ for tt = 1:dsobj.d.T
 %         handles.sp{2}.infer.smooth.yhatSigma{tt} = dsobj.par.H * handles.sp{2}.infer.smooth.sigma{tt} * dsobj.par.H' + dsobj.par.R;
 %     else
         % transform posterior mean into observation space
-        handles.yhat(:,tt) = h(dsobj.x(:,tt), u_t);
+        if dsobj.emiLinear
+            handles.yhat(:,tt) = dsobj.par.H * dsobj.x(:,tt);
+        else
+            handles.yhat(:,tt) = h(dsobj.x(:,tt), u_t);
+        end
         for jj = 1:2
             for kk = 1:2
                 % filter
                 m_x           = handles.sp{jj}.infer.(F_S{kk}).mu(:,tt);
                 P_x           = handles.sp{jj}.infer.(F_S{kk}).sigma{tt};
                 pars          = getParams(handles.sp{jj}, 2, ftypes(jj,1));
-                [m_tt,P_tt,~] = utils.assumedDensityTform(pars, m_x, P_x, u_t, ftypes(jj,1), utpars{jj,1});
+                [m_tt,P_tt,~] = ds.utils.assumedDensityTform(pars, m_x, P_x, u_t, ftypes(jj,1), utpars{jj,1});
                 handles.sp{jj}.infer.(F_S{kk}).yhat(:,tt) = m_tt;
                 handles.sp{jj}.infer.(F_S{kk}).yhatSigma{tt} = P_tt;
             end
@@ -418,7 +422,7 @@ function par = getParams(obj, stage, type)
             par.Q = obj.par.Q;
             if type == 0
                 par.A  = obj.par.A;
-                if obj.hasControl && ~isempty(obj.par.B)
+                if ~isempty(obj.par.B)
                     par.B = obj.par.B;
                     par.control = true;
                 end
@@ -432,8 +436,9 @@ function par = getParams(obj, stage, type)
             par.Q = obj.par.R;
             if type == 0
                 par.A = obj.par.H;
-                if obj.hasControl
+                if ~isempty(obj.par.C)
                     par.B = obj.par.C;
+                    par.control = true;
                 end
             else
                 par.f  = obj.par.h;

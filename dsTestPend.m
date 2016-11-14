@@ -11,7 +11,7 @@ qc     = 1;
 Q      = [qc * dt^3 / 3, qc * dt^2 / 2; qc * dt^2 / 2, qc * dt];
 R      = 0.2;
 
-dsPend  = dynamicalSystem(2, 1, 'x0', [1;-0.6], 0.5, 'evolution', f, F, Q, 'emission', h, H, R, 'data', 400);
+dsPend  = ds.dynamicalSystem(2, 1, 'x0', [1;-0.6], 0.5, 'evolution', f, F, Q, 'emission', h, H, R, 'data', 400);
 
 
 %%
@@ -22,7 +22,7 @@ dsPend  = dsPend.save(':EKF');
 dsPend  = dsPend.filter('ukf');
 dsPend  = dsPend.smooth('ukf');
 dsPend  = dsPend.save(':UKF');
-gui.posteriorGaussGUI(dsPend, ':EKF', ':UKF');
+ds.gui.posteriorGaussGUI(dsPend, ':EKF', ':UKF');
 
 %%
 dsPEnd  = dsPend.filterMix('EKF');
@@ -40,7 +40,7 @@ R       = 0.1;
 % f       = @(x) [x(1,:) + x(2,:)*dt; x(2,:) - g*sin(x(1,:))*dt];
 % F       = @(x) [1, dt; -g*cos(x(1))*dt, 1];
 % F       = [1 DT; -g*cos(m(1))*DT 1];
-dsPend  = dynamicalSystem(2, 1, 'x0', m0, P0, 'evolution', f, F, Q, 'emission', h, H, R, 'data', Y, 'xtrue', X);
+dsPend  = ds.dynamicalSystem(2, 1, 'x0', m0, P0, 'evolution', f, F, Q, 'emission', h, H, R, 'data', Y, 'xtrue', X);
 
 
 %%
@@ -60,7 +60,7 @@ qc     = 1;
 Q      = [qc * dt^3 / 3, qc * dt^2 / 2; qc * dt^2 / 2, qc * dt];
 R      = 0.2;
 
-dsPend  = dynamicalSystem(2, 1, 'x0', [1;-0.6], 0.5, 'evolution', f, F, Q, 'emission', h, H, R, 'data', 400, 'control', u_inp, true, true);
+dsPend  = ds.dynamicalSystem(2, 1, 'x0', [1;-0.6], 0.5, 'evolution', f, F, Q, 'emission', h, H, R, 'data', 400, 'control', u_inp, true, true);
 
 %%
 
@@ -71,4 +71,4 @@ dsPend  = dsPend.save(':EKF');
 dsPend  = dsPend.filter('ukf');
 dsPend  = dsPend.smooth('ukf');
 dsPend  = dsPend.save(':UKF');
-gui.posteriorGaussGUI(dsPend, ':EKF', ':UKF');
+ds.gui.posteriorGaussGUI(dsPend, ':EKF', ':UKF');

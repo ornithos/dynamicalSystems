@@ -55,7 +55,7 @@ function obj = filter(obj, fType, bDoLLH, utpar, opts)
     
     bNumeric     = true;
     inpFtype     = fType;
-    fType        = utils.filterTypeLookup(fType, bNumeric) - 1;
+    fType        = ds.utils.filterTypeLookup(fType, bNumeric) - 1;
     if fType>0 && obj.evoLinear && obj.emiLinear
         warning(['Model is linear: exact inference will be performed using ', ...
                 'Kalman equations rather than %s type requested'], utils.filterTypeLookup(inpFtype));
@@ -88,10 +88,10 @@ function obj = filter(obj, fType, bDoLLH, utpar, opts)
         else
             u_t = [];
         end
-        [m_minus, P_minus, ~] = utils.assumedDensityTform(parPredict, m, P, u_t, fType1, utpar);
+        [m_minus, P_minus, ~] = ds.utils.assumedDensityTform(parPredict, m, P, u_t, fType1, utpar);
 
         % Filter step
-        [m_y, S, covxy]   = utils.assumedDensityTform(parUpdate, m_minus, P_minus, u_t, fType2, utpar);
+        [m_y, S, covxy]   = ds.utils.assumedDensityTform(parUpdate, m_minus, P_minus, u_t, fType2, utpar);
         [Sinv, lam]       = utils.math.pinvAndEig(S, 1e-12);
         K                 = covxy * Sinv;
         deltaY            = obj.y(:,tt) - m_y;
@@ -125,7 +125,7 @@ function par = getParams(obj, stage, type)
             par.Q = obj.par.Q;
             if type == 0
                 par.A  = obj.par.A;
-                if obj.hasControl && ~isempty(obj.par.B)
+                if obj.hasControl(1) && ~isempty(obj.par.B)
                     par.B = obj.par.B;
                     par.control = true;
                 end
@@ -139,7 +139,7 @@ function par = getParams(obj, stage, type)
             par.Q = obj.par.R;
             if type == 0
                 par.A = obj.par.H;
-                if obj.hasControl
+                if obj.hasControl(2)
                     par.B = obj.par.C;
                 end
             else

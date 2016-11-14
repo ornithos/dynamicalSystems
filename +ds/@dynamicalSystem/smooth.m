@@ -51,12 +51,12 @@ function obj = smooth(obj, sType, utpar, opts)
     
     bNumeric     = true;
     inpStype     = sType;
-    sType        = utils.filterTypeLookup(sType, bNumeric) - 1;
+    sType        = ds.utils.filterTypeLookup(sType, bNumeric) - 1;
     if sType == 0 && ~(obj.evoLinear && obj.emiLinear)
         error('Unable to perform linear inference in non-linear model');
     elseif sType>0 && obj.evoLinear && obj.emiLinear
         warning(['Model is linear: exact inference will be performed using ', ...
-                'RTS equations rather than %s type requested'], utils.filterTypeLookup(inpStype));
+                'RTS equations rather than %s type requested'], ds.utils.filterTypeLookup(inpStype));
     end
     
     % Check for existence of Filter
@@ -87,10 +87,10 @@ function obj = smooth(obj, sType, utpar, opts)
     smoothG      = cell(obj.d.T-1,1);
     
     %% -- Main Loop --
-    
+    hasControl = any(obj.hasControl);
     for tt = (obj.d.T-1):-1:1
         % Prediction step
-        if any(obj.hasControl)
+        if hasControl
             u_t = obj.u(:,tt);
         else
             u_t = [];
@@ -98,7 +98,7 @@ function obj = smooth(obj, sType, utpar, opts)
         
         fP_tt           = fSigma{tt};
         fMu_tt          = fMu(:,tt);
-        [m_minus, P_minus, covttp1] = utils.assumedDensityTform(parPredict, fMu_tt, fP_tt, u_t, fType1, utpar);
+        [m_minus, P_minus, covttp1] = ds.utils.assumedDensityTform(parPredict, fMu_tt, fP_tt, u_t, fType1, utpar);
 
         % Smoothing step
         G               = covttp1 / (P_minus);
@@ -112,10 +112,12 @@ function obj = smooth(obj, sType, utpar, opts)
     end
     
     % x0 (purely to get G_0)
-    u_t             = zeros(obj.d.u,1);
+    if hasControl
+        u_t             = zeros(obj.d.u,1);
+    end
     fMu_tt          = obj.par.x0.mu;
     fP_tt           = obj.par.x0.sigma;
-    [m_minus, P_minus, covttp1]  = utils.assumedDensityTform(parPredict, fMu_tt, fP_tt, u_t, fType1, utpar);
+    [m_minus, P_minus, covttp1]  = ds.utils.assumedDensityTform(parPredict, fMu_tt, fP_tt, u_t, fType1, utpar);
    
     G               = covttp1 / (P_minus);
     m               = obj.par.x0.mu + G * (m - m_minus);
@@ -138,7 +140,7 @@ function par = getParams(obj, stage, type)
             par.Q = obj.par.Q;
             if type == 0
                 par.A  = obj.par.A;
-                if obj.hasControl && ~isempty(obj.par.B)
+                if obj.hasControl(1) && ~isempty(obj.par.B)
                     par.B = obj.par.B;
                     par.control = true;
                 end
@@ -152,7 +154,7 @@ function par = getParams(obj, stage, type)
             par.Q = obj.par.R;
             if type == 0
                 par.A = obj.par.H;
-                if obj.hasControl
+                if obj.hasControl(2)
                     par.B = obj.par.C;
                 end
             else
