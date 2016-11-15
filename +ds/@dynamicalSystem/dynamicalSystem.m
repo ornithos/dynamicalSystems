@@ -63,7 +63,12 @@ classdef dynamicalSystem
    % assumed to be opts if it is a struct.
    
    properties
-      opts, stack = cell(100,2)
+      opts, stack = cell(100,2),
+      %  ___ Parameters ___
+       par = struct('x0',struct,'A',[],'H',[],'Q',[],'R',[], ...
+                      'f',[],'Df',[],'h',[],'Dh',[], ...
+                      'evoNLParams',struct,'emiNLParams',struct, ...
+                      'B',[],'C',[], 'Cu', [], 'Du', [])
    end
    properties (SetAccess = protected)
        x, y, d, u
@@ -74,11 +79,6 @@ classdef dynamicalSystem
        hasControl = false(2,1);
        stackptr = 0
        % ----------------- Changeable:
-       %  ___ Parameters ___
-       par = struct('x0',struct,'A',[],'H',[],'Q',[],'R',[], ...
-                      'f',[],'Df',[],'h',[],'Dh',[], ...
-                      'evoNLParams',struct,'emiNLParams',struct, ...
-                      'B',[],'C',[], 'Cu', [], 'Du', [])
        %  ___ Inference ___
        infer = struct('filter',[], 'smooth', [], 'llh', [], 'fType', [], ...
                       'sType', [], 'fpHash', [])
@@ -276,6 +276,15 @@ classdef dynamicalSystem
       function b   = parametersChanged(obj)
             b = ~strcmp(obj.infer.fpHash, obj.parameterHash);
       end
+      
+      function llh = logLikelihood(obj, fType, utpar, opts)
+          if nargin < 4; opts = struct; end
+          if nargin < 3; utpar = struct; end
+          if nargin < 2; fType = []; end
+          tmpobj = obj.filter(fType, true, utpar, opts);
+          llh    = tmpobj.infer.llh;
+      end
+      
       % --- prototypes -------------------
       % inference / learning 
       obj = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy

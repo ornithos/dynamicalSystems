@@ -12,8 +12,12 @@ opts         = utils.struct.structCoalesce(opts, optsDefault);
     
 % Check for existence of Smoothed estimates
 if ~opts.bIgnoreHash && obj.parametersChanged
-    if opts.verbose; fprintf('Filter not run or parameters changed. Rerunning filter...\n'); end
+    if opts.verbose; fprintf('Filter not run for current params. Rerunning filter/smoother...\n'); end
     obj = obj.filter('Kalman', false, [], opts);
+    obj = obj.smooth('Linear', [], opts);
+end
+if isempty(obj.infer.sType)
+    if opts.verbose; fprintf('Smoother not run for current params. Running smoother...\n'); end
     obj = obj.smooth('Linear', [], opts);
 end
 
