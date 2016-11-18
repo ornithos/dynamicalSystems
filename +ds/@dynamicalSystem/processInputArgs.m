@@ -11,9 +11,9 @@ function obj = processInputArgs(obj, args)
         nargs = numel(args);
          
         % update options
-        optsDefault     = struct('warnings', true, 'verbose', false);
+        optsDefault     = struct('warnings', true, 'verbose', true);
         if isstruct(args{nargs})
-            obj.opts        = utils.base.parse_argumentlist(opts, optsDefault);
+            obj.opts        = utils.base.parse_argumentlist(args{nargs}, optsDefault, true);
             nargs           = nargs - 1;
         else
             obj.opts        = optsDefault;
@@ -360,6 +360,7 @@ function obj = internalProcessControl(obj, arg)
         end
     end
     
+    obj.par.uu        = u * u';
    
 end
 

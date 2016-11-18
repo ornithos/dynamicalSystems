@@ -47,4 +47,5 @@ for tt = 1:T
 end
 s.C     = s.C./T;
 
+s.infer = struct('mu', mu); s.infer.P = sigma; s.infer.G = G;   % hack to stop MATLAB making a struct array
 end

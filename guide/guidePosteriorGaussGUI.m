@@ -144,11 +144,8 @@ for tt = 1:dsobj.d.T
 %         handles.sp{2}.infer.smooth.yhatSigma{tt} = dsobj.par.H * handles.sp{2}.infer.smooth.sigma{tt} * dsobj.par.H' + dsobj.par.R;
 %     else
         % transform posterior mean into observation space
-        if dsobj.emiLinear
-            handles.yhat(:,tt) = dsobj.par.H * dsobj.x(:,tt);
-        else
-            handles.yhat(:,tt) = h(dsobj.x(:,tt), u_t);
-        end
+        handles.yhat(:,tt) = dsobj.yhat(:,tt);
+        
         for jj = 1:2
             for kk = 1:2
                 % filter

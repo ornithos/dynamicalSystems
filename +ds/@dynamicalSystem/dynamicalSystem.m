@@ -68,10 +68,10 @@ classdef dynamicalSystem
        par = struct('x0',struct,'A',[],'H',[],'Q',[],'R',[], ...
                       'f',[],'Df',[],'h',[],'Dh',[], ...
                       'evoNLParams',struct,'emiNLParams',struct, ...
-                      'B',[],'C',[], 'Cu', [], 'Du', [])
+                      'B',[],'C',[], 'uu', [])
    end
    properties (SetAccess = protected)
-       x, y, d, u
+       x, y, yhat, d, u
        evoLinear = []
        evoNLhasParams = false
        emiLinear = []
@@ -91,10 +91,10 @@ classdef dynamicalSystem
          % pre populate filter/smoother for input data
          if obj.evoLinear && obj.emiLinear
              if obj.validationInference(false)
-                 fprintf('(%s) Running smoother for input parameters...  ', datestr(now, 'HH:MM:SS'));
+                 if obj.opts.verbose; fprintf('(%s) Running smoother for input parameters...  ', datestr(now, 'HH:MM:SS')); end
                  obj = obj.filter('Kalman');
                  obj = obj.smooth('Linear');
-                 fprintf('Complete!\n');
+                 if obj.opts.verbose; fprintf('Complete!\n'); end
                  obj = obj.save('initialised');
              else
                  if obj.opts.warnings
@@ -120,13 +120,17 @@ classdef dynamicalSystem
               u_t = [];
               if any(obj.hasControl); u_t = obj.u(:,tt); end
               obj.x(:,tt+1) = obj.doTransition(obj.x(:,tt), u_t) + transChol * randn(obj.d.x,1);
-              obj.y(:,tt)   = obj.doEmission(obj.x(:,tt+1), u_t) + emissChol * randn(obj.d.y,1);
+              obj.yhat(:,tt)= obj.doEmission(obj.x(:,tt+1), u_t);
+              obj.y(:,tt)   = obj.yhat(:,tt) + emissChol * randn(obj.d.y,1);
+              
+              %plot(obj.par.H(1,:) * obj.x(:,1:tt-1), obj.par.H(2,:) * obj.x(:,1:tt-1)); hold on; plot(obj.y(1,1:tt-1), obj.y(2,1:tt-1)); hold off;
+              %pause
           end
           obj.x       = obj.x(:,2:end);
       end
         
       function obj = useSavedParameters(obj, savedName, verbose)
-          if nargin < 3 || isempty(verbose); verbose = true; end
+          if nargin < 3 || isempty(verbose); verbose = obj.opts.verbose; end
           idx     = obj.stackFind(savedName);
           svPoint = obj.stack{idx, 1};
           if verbose; fprintf('Using parameters from save-point ''%s''..\n', obj.stack{idx,2}); end
@@ -208,9 +212,9 @@ classdef dynamicalSystem
       function obj = save(obj, descr)
           assert(nargin == 2, 'please provide a description');
           if ~strcmp(obj.infer.fpHash, obj.parameterHash)
-              if obj.opts.warnings; warning('posterior does not match current parameters'); end
+              if obj.opts.warnings; fprintf('SAVE: posterior does not match current parameters'); end
               if obj.evoLinear && obj.emiLinear
-                  fprintf('(%s) Running posterior...\n', datestr(now, 'HH:MM:SS'));
+                  if obj.opts.warnings; fprintf('... fixed!\n'); end
                   ftype = obj.infer.fType;
                   stype = obj.infer.sType;
                   obj = obj.filter(ftype);
@@ -298,9 +302,9 @@ classdef dynamicalSystem
 %       obj = smoothUnscented(obj, bDoValidation, utpar); % Unscented (UKF) RTS Smoother
       obj = smooth(obj, fType, utpar, opts) % one of dynamics linear, other piped to NL.
       obj = ssid(obj, L);  % Subspace ID
-      [obj, llh] = parameterLearningEM(obj, opts);
+      [obj, llh, niters] = parameterLearningEM(obj, opts);
       
-      
+      obj = suffStats(obj, opts);  % Sufficient statistics required for learning
       % graphical
       plotStep2D(obj, posteriorType)
    end
@@ -308,7 +312,7 @@ classdef dynamicalSystem
    methods (Access = protected, Hidden=true)
        obj = parameterLearningMStep(obj, verbose, updateOnly); % internals for EM
        obj = validationInference(obj, doError); % Input validation
-       obj = suffStats(obj, opts);  % Sufficient statistics required for learning
+       
    end
    
    methods (Access = private)
@@ -318,6 +322,7 @@ classdef dynamicalSystem
            
             if obj.evoLinear
                   out        = obj.par.A * input;
+                  if obj.hasControl(1); out = out + obj.par.B * u; end
             else
                 [f,~,~,~]    = obj.functionInterfaces;
                 out          = f(input, u);
@@ -326,6 +331,7 @@ classdef dynamicalSystem
         function out = doEmission(obj, input, u)
             if obj.emiLinear
                  out = obj.par.H * input;
+                 if obj.hasControl(2); out = out + obj.par.C * u; end
             else
                 [~,~,h,~]    = obj.functionInterfaces;
                 out          = h(input, u);

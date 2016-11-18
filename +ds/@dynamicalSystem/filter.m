@@ -78,28 +78,37 @@ function obj = filter(obj, fType, bDoLLH, utpar, opts)
     % initialise t-1 = 0 values to prior
     m               = obj.par.x0.mu;
     P               = obj.par.x0.sigma;
+    u_t             = zeros(obj.d.x,1);
     
     %% -- Main Loop --
     
     for tt = 1:obj.d.T
         % Prediction step
+        [m_minus, P_minus, ~] = ds.utils.assumedDensityTform(parPredict, m, P, u_t, fType1, utpar);
+        P_minus               = (P_minus+P_minus')/2;
+        % control signal is (t) for update, but (t-1) for predict
         if any(obj.hasControl)
             u_t = obj.u(:,tt);
         else
             u_t = [];
         end
-        [m_minus, P_minus, ~] = ds.utils.assumedDensityTform(parPredict, m, P, u_t, fType1, utpar);
-
-        % Filter step
+        
+        % Update step
         [m_y, S, covxy]   = ds.utils.assumedDensityTform(parUpdate, m_minus, P_minus, u_t, fType2, utpar);
-        [Sinv, lam]       = utils.math.pinvAndEig(S, 1e-12);
-        K                 = covxy * Sinv;
+        S                 = (S+S')/2;
+        K                 = covxy / S;
+        %K                 = utils.math.mmInverseChol(covxy, cholS);
         deltaY            = obj.y(:,tt) - m_y;
         m                 = m_minus + K*deltaY;
         P                 = P_minus - K * S * K';
         
         if bDoLLH
-            llh         = llh - 0.5*d*log(2*pi) - 0.5*sum(log(lam)) - 0.5*deltaY'*Sinv*deltaY;
+%             [Sinv, lam] = utils.math.pinvAndEig(S, 1e-12);  % unstable if used in KF eqns (messed up!)
+%             llh         = llh - 0.5*d*log(2*pi) - 0.5*sum(log(lam)) - 0.5*deltaY'*Sinv*deltaY;
+            cholS       = cholcov(S);
+            addlLLH     = utils.math.mvnlogpdfchol(deltaY', zeros(1,d), cholS);
+%             fprintf('diff in LLH calcs is: %.5e\n', addlLLH - log(mvnpdf(deltaY', zeros(1,d), S)));
+            llh         = llh + addlLLH;
         end
         
         % save
@@ -136,11 +145,11 @@ function par = getParams(obj, stage, type)
             end
             
         elseif stage == 2
-            par.Q = obj.par.R;
+            par.Q = obj.par.R; % ok - Q refers to the covariance matrix regardless of stage.
             if type == 0
-                par.A = obj.par.H;
+                par.A = obj.par.H; % ok - A refers to the transition/emission matrix regardless of stage.
                 if obj.hasControl(2)
-                    par.B = obj.par.C;
+                    par.B = obj.par.C;   % ok - B refers to the linear control matrix regardless of stage.
                 end
             else
                 par.f  = h;
