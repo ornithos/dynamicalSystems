@@ -3,7 +3,7 @@ function [obj, llh, ii] = parameterLearningEM(obj, opts)
 if nargin < 2 || isempty(opts); opts = struct; end
 optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL', 5, ...
                         'verbose', true, 'dbg', false, 'validation', false, ...
-                        'sampleStability', 1);
+                        'sampleStability', 1, 'diagQ', false, 'diagR', false);
 optsDefault     = utils.base.parse_argumentlist(obj.opts, optsDefault, false);      % bring in global opts
 opts            = utils.base.parse_argumentlist(opts, optsDefault, false);          % add user specified opts.
 
@@ -40,6 +40,7 @@ if opts.validation
 end
 
 fOpts      = struct('bDoValidation', false, 'bIgnoreHash', true);
+mstepOpts  = struct('verbose', opts.dbg, 'diagQ', opts.diagQ, 'diagR', opts.diagR);
 converged  = false;
 iterBar    = utils.base.objIterationBar;
 iterBar.newIterationBar('EM Iteration: ', opts.maxiter, true, '--- ', 'LLH change: ');
@@ -89,7 +90,7 @@ for ii = 1:opts.maxiter
     % ----------------------------
     
     % ____ Canonical parameters ___________________________________________
-    obj       = obj.parameterLearningMStep(opts.dbg, {'A'});
+    obj       = obj.parameterLearningMStep({'A'}, mstepOpts);
     
     % Check for stability of A: significant problems when A blows up.
     if mod(ii, opts.sampleStability) == 0
@@ -107,25 +108,25 @@ for ii = 1:opts.maxiter
     % Q, H, R
     switch multiStep
         case 4
-            obj       = obj.parameterLearningMStep(opts.dbg, {'Q','H','R'});
+            obj       = obj.parameterLearningMStep({'Q','H','R'}, mstepOpts);
         case 2
-            obj       = obj.parameterLearningMStep(opts.dbg, {'Q'});
+            obj       = obj.parameterLearningMStep({'Q'}, mstepOpts);
             obj       = obj.filter('Kalman', true, [], fOpts);
             obj       = obj.smooth('Linear', [], fOpts);
-            obj       = obj.parameterLearningMStep(opts.dbg, {'H','R'});
+            obj       = obj.parameterLearningMStep({'H','R'}, mstepOpts);
         case 1
             obj       = obj.filter('Kalman', true, [], fOpts);
             obj       = obj.smooth('Linear', [], fOpts);
             dbgLLH.A  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
-            obj       = obj.parameterLearningMStep(opts.dbg, {'Q'});
+            obj       = obj.parameterLearningMStep({'Q'}, mstepOpts);
             obj       = obj.filter('Kalman', true, [], fOpts);
             obj       = obj.smooth('Linear', [], fOpts);
             dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh];
-            obj       = obj.parameterLearningMStep(opts.dbg, {'H'});
+            obj       = obj.parameterLearningMStep({'H'}, mstepOpts);
             obj       = obj.filter('Kalman', true, [], fOpts);
             obj       = obj.smooth('Linear', [], fOpts);
             dbgLLH.H  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh];
-            obj       = obj.parameterLearningMStep(opts.dbg, {'R'});
+            obj       = obj.parameterLearningMStep({'R'}, mstepOpts);
         otherwise
             error('Param Learning: FAIL. multiStep NOT IN (1,2,4)');
     end
@@ -136,14 +137,14 @@ for ii = 1:opts.maxiter
         obj       = obj.smooth('Linear', [], fOpts);
         dbgLLH.R  = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh];
         if multiStep > 1
-            obj       = obj.parameterLearningMStep(opts.dbg, {'B', 'C'});
+            obj       = obj.parameterLearningMStep({'B', 'C'}, mstepOpts);
         else
-            obj       = obj.parameterLearningMStep(opts.dbg, {'B'});
+            obj       = obj.parameterLearningMStep({'B'}, mstepOpts);
             obj       = obj.filter('Kalman', [], [], fOpts);
             obj       = obj.smooth('Linear', [], fOpts);
             dbgLLH.B  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh];
             dbgLLH.H  = [dbgLLH.B(1), dbgLLH.H(2)];
-            obj       = obj.parameterLearningMStep(opts.dbg, {'C'});
+            obj       = obj.parameterLearningMStep({'C'}, mstepOpts);
         end
     end
     

@@ -40,7 +40,7 @@ for ii = 1:numSim
     dsTemp.par.Q = eye(N);
     dsTemp.par.H = rand(D, N) - 1;
     
-    if false
+    if true
         tmpTic                = tic;
         [dsEM, llh, niter]    = dsTemp.parameterLearningEM(emOpts);
         results(ii,1:5)       = [N, D, dsTemp.getSaved('original-params').infer.llh, llh(end), niter];
