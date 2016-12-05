@@ -15,17 +15,17 @@ dsPend  = ds.dynamicalSystem(2, 1, 'x0', [1;-0.6], 0.5, 'evolution', f, F, Q, 'e
 
 
 %%
-dsPend  = dsPend.filter('ekf');
-dsPend  = dsPend.smooth('ekf');
-dsPend  = dsPend.save(':EKF');
+dsPend.filter('ekf');
+dsPend.smooth('ekf');
+dsPend.save(':EKF');
 
-dsPend  = dsPend.filter('ukf');
-dsPend  = dsPend.smooth('ukf');
-dsPend  = dsPend.save(':UKF');
+dsPend.filter('ukf');
+dsPend.smooth('ukf');
+dsPend.save(':UKF');
 ds.gui.posteriorGaussGUI(dsPend, ':EKF', ':UKF');
 
 %%
-dsPEnd  = dsPend.filterMix('EKF');
+dsPend.filterMix('EKF');
 
 %% Sarkka stuff
 % ... run pendulum_sim ...
@@ -64,11 +64,11 @@ dsPend  = ds.dynamicalSystem(2, 1, 'x0', [1;-0.6], 0.5, 'evolution', f, F, Q, 'e
 
 %%
 
-dsPend  = dsPend.filter('ekf');
-dsPend  = dsPend.smooth('ekf');
-dsPend  = dsPend.save(':EKF');
+dsPend.filter('ekf');
+dsPend.smooth('ekf');
+dsPend.save(':EKF');
 
-dsPend  = dsPend.filter('ukf');
-dsPend  = dsPend.smooth('ukf');
-dsPend  = dsPend.save(':UKF');
+dsPend.filter('ukf');
+dsPend.smooth('ukf');
+dsPend.save(':UKF');
 ds.gui.posteriorGaussGUI(dsPend, ':EKF', ':UKF');

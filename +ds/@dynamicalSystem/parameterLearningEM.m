@@ -16,7 +16,7 @@ if opts.ssid
     if opts.verbose
         fprintf('(%s) Initialising using subspace identification...\n', datestr(now, 'HH:MM:SS'));
     end
-    obj = obj.ssid(opts.ssidL);
+    obj.ssid(opts.ssidL);
 else
     var_y   = var(obj.y);
     if isempty(obj.par.A)
@@ -50,8 +50,8 @@ iterBar.newIterationBar('EM Iteration: ', opts.maxiter, true, '--- ', 'LLH chang
 multiStep  = 4;
 dbgLLH = struct('A',[0,0],'Q',[0,0],'H',[0,0],'R',[0,-Inf]);
 for ii = 1:opts.maxiter
-    obj    = obj.filter('Kalman', true, [], fOpts);
-    obj    = obj.smooth('Linear', [], fOpts);
+    obj.filter('Kalman', true, [], fOpts);
+    obj.smooth('Linear', [], fOpts);
     
     % llh calc
     dbgLLH.R  = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh];
@@ -90,7 +90,7 @@ for ii = 1:opts.maxiter
     % ----------------------------
     
     % ____ Canonical parameters ___________________________________________
-    obj       = obj.parameterLearningMStep({'A'}, mstepOpts);
+    obj.parameterLearningMStep({'A'}, mstepOpts);
     
     % Check for stability of A: significant problems when A blows up.
     if mod(ii, opts.sampleStability) == 0
@@ -108,43 +108,48 @@ for ii = 1:opts.maxiter
     % Q, H, R
     switch multiStep
         case 4
-            obj       = obj.parameterLearningMStep({'Q','H','R'}, mstepOpts);
+            obj.parameterLearningMStep({'Q','H','R'}, mstepOpts);
         case 2
-            obj       = obj.parameterLearningMStep({'Q'}, mstepOpts);
-            obj       = obj.filter('Kalman', true, [], fOpts);
-            obj       = obj.smooth('Linear', [], fOpts);
-            obj       = obj.parameterLearningMStep({'H','R'}, mstepOpts);
+            obj.parameterLearningMStep({'Q'}, mstepOpts);
+            obj.filter('Kalman', true, [], fOpts);
+            obj.smooth('Linear', [], fOpts);
+            obj.parameterLearningMStep({'H','R'}, mstepOpts);
         case 1
-            obj       = obj.filter('Kalman', true, [], fOpts);
-            obj       = obj.smooth('Linear', [], fOpts);
+            obj.filter('Kalman', true, [], fOpts);
+            obj.smooth('Linear', [], fOpts);
             dbgLLH.A  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
-            obj       = obj.parameterLearningMStep({'Q'}, mstepOpts);
-            obj       = obj.filter('Kalman', true, [], fOpts);
-            obj       = obj.smooth('Linear', [], fOpts);
+            
+            obj.parameterLearningMStep({'Q'}, mstepOpts);
+            obj.filter('Kalman', true, [], fOpts);
+            obj.smooth('Linear', [], fOpts);
             dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh];
-            obj       = obj.parameterLearningMStep({'H'}, mstepOpts);
-            obj       = obj.filter('Kalman', true, [], fOpts);
-            obj       = obj.smooth('Linear', [], fOpts);
+            
+            obj.parameterLearningMStep({'H'}, mstepOpts);
+            obj.filter('Kalman', true, [], fOpts);
+            obj.smooth('Linear', [], fOpts);
             dbgLLH.H  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh];
-            obj       = obj.parameterLearningMStep({'R'}, mstepOpts);
+            
+            obj.parameterLearningMStep({'R'}, mstepOpts);
         otherwise
             error('Param Learning: FAIL. multiStep NOT IN (1,2,4)');
     end
     
     % ____ Control parameters _____________________________________________
     if any(obj.hasControl)
-        obj       = obj.filter('Kalman', [], [], fOpts);
-        obj       = obj.smooth('Linear', [], fOpts);
+        obj.filter('Kalman', [], [], fOpts);
+        obj.smooth('Linear', [], fOpts);
         dbgLLH.R  = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh];
+        
         if multiStep > 1
-            obj       = obj.parameterLearningMStep({'B', 'C'}, mstepOpts);
+            obj.parameterLearningMStep({'B', 'C'}, mstepOpts);
         else
-            obj       = obj.parameterLearningMStep({'B'}, mstepOpts);
-            obj       = obj.filter('Kalman', [], [], fOpts);
-            obj       = obj.smooth('Linear', [], fOpts);
+            obj.parameterLearningMStep({'B'}, mstepOpts);
+            obj.filter('Kalman', [], [], fOpts);
+            obj.smooth('Linear', [], fOpts);
             dbgLLH.B  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh];
             dbgLLH.H  = [dbgLLH.B(1), dbgLLH.H(2)];
-            obj       = obj.parameterLearningMStep({'C'}, mstepOpts);
+            
+            obj.parameterLearningMStep({'C'}, mstepOpts);
         end
     end
     

@@ -62,7 +62,7 @@ function obj = smooth(obj, sType, utpar, opts)
     % Check for existence of Filter
     if ~opts.bIgnoreHash && obj.parametersChanged
         if obj.opts.verbose; fprintf('Filter not run or parameters changed. Rerunning filter...\n'); end
-        obj = obj.filter(inpStype, false, utpar, opts);
+        obj.filter(inpStype, false, utpar, opts);
     end
     if ~strcmpi(obj.infer.fType, inpStype) && ~(strcmp(obj.infer.fType, 'Kalman') || ...
             sType==0)

@@ -1,4 +1,4 @@
-classdef dynamicalSystem
+classdef dynamicalSystem < handle
    % dynamicalSystem: create linear/non-linear dynamical system object with
    % access to filtering, smoothing and learning methods, and visualisations
    % for comparison of methods.
@@ -86,16 +86,16 @@ classdef dynamicalSystem
    methods
       function obj = dynamicalSystem(varargin)
          % CONSTRUCTOR
-         obj = obj.processInputArgs(varargin);
+         obj.processInputArgs(varargin);
          
          % pre populate filter/smoother for input data
          if obj.evoLinear && obj.emiLinear
              if obj.validationInference(false)
                  if obj.opts.verbose; fprintf('(%s) Running smoother for input parameters...  ', datestr(now, 'HH:MM:SS')); end
-                 obj = obj.filter('Kalman');
-                 obj = obj.smooth('Linear');
+                 obj.filter('Kalman');
+                 obj.smooth('Linear');
                  if obj.opts.verbose; fprintf('Complete!\n'); end
-                 obj = obj.save('initialised');
+                 obj.save('initialised');
              else
                  if obj.opts.warnings
                      warning('dynamicalSystem cannot perform initial inference since not all parameters specified.');
@@ -217,8 +217,8 @@ classdef dynamicalSystem
                   if obj.opts.warnings; fprintf('... fixed!\n'); end
                   ftype = obj.infer.fType;
                   stype = obj.infer.sType;
-                  obj = obj.filter(ftype);
-                  obj = obj.smooth(stype);
+                  obj.filter(ftype);
+                  obj.smooth(stype);
               else
                   error('Unable to save: posterior does not match parameters. Please run a posterior algm');
               end
@@ -285,7 +285,7 @@ classdef dynamicalSystem
           if nargin < 4; opts = struct; end
           if nargin < 3; utpar = struct; end
           if nargin < 2; fType = []; end
-          tmpobj = obj.filter(fType, true, utpar, opts);
+          tmpobj.filter(fType, true, utpar, opts);
           llh    = tmpobj.infer.llh;
       end
       
