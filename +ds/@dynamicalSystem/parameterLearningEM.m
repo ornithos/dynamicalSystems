@@ -1,9 +1,9 @@
-function [obj, llh, ii] = parameterLearningEM(obj, opts)
+function [llh, ii] = parameterLearningEM(obj, opts)
 
 if nargin < 2 || isempty(opts); opts = struct; end
 optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL', 5, ...
                         'verbose', true, 'dbg', false, 'validation', false, ...
-                        'sampleStability', 1, 'diagQ', false, 'diagR', false);
+                        'sampleStability', 1, 'diagQ', false, 'diagR', false, 'stableVerbose', false);
 optsDefault     = utils.base.parse_argumentlist(obj.opts, optsDefault, false);      % bring in global opts
 opts            = utils.base.parse_argumentlist(opts, optsDefault, false);          % add user specified opts.
 
@@ -59,7 +59,10 @@ for ii = 1:opts.maxiter
     delta     = llh(ii+1) - llh(ii);
     
     % negative update warning
-    if delta < -1e-8
+    % --- if prev step constrained, we may have seen a drop in LLH.
+    %     However, we do not expect this in the case where sampleStability
+    %     is 1 since should still be monotonic if every iter stable.
+    if delta < -1e-8 && ~(prevStepWasConstrained && ~(sampleStability == 1))
         iterBar.updateText([iterBar.text, '*']);
         if multiStep == 1
             % basically things have gone really wrong by here..
@@ -90,9 +93,12 @@ for ii = 1:opts.maxiter
     % ----------------------------
     
     % ____ Canonical parameters ___________________________________________
+    prevA         = obj.par.A;
+%     prevLLH       = obj.logLikelihood;
     obj.parameterLearningMStep({'A'}, mstepOpts);
     
     % Check for stability of A: significant problems when A blows up.
+    prevStepWasConstrained = false;
     if mod(ii, opts.sampleStability) == 0
         if max(abs(eig(obj.par.A))) > 1 + sing_val_eps
             cgTic        = tic;
@@ -100,8 +106,15 @@ for ii = 1:opts.maxiter
                 iterBar.clearConsole;
                 fprintf('Stabilising A with constraint generation... ');
             end
-            obj.par.A    = stabiliseA_constraintGeneration(obj, opts.verbose); % see mini function below ????
+            badA         = obj.par.A;
+            obj.par.A    = prevA;   % reset to last good A
+            obj.par.A    = stabiliseA_constraintGeneration(obj, prevA, opts.stableVerbose); % see mini function below ????
+%             newLLH       = obj.logLikelihood;
+%             if newLLH < prevLLH
+%                 keyboard
+%             end
             if opts.verbose; fprintf('Done! (%.2f)\n', toc(cgTic)); end
+            prevStepWasConstrained = true;
         end
     end
     
@@ -168,19 +181,24 @@ llh = llh(2:ii+1);
 end
 
 
-function A = stabiliseA_constraintGeneration(obj, verbose)
+function A = stabiliseA_constraintGeneration(obj, curEstimate, verbose)
     % -- what about x0 estimates?
     m          = obj.infer.smooth.mu;
-    P          = obj.infer.smooth.sigma;
-    G          = obj.infer.smooth.G;
-    sumP       = sum(cat(3,P{1:obj.d.T}),3);
-    sumC       = 0;
-    for tt = 1:obj.d.T-1
-        sumC = sumC + P{tt+1} * G{tt}';
-    end    
-
+%     P          = obj.infer.smooth.sigma;
+%     G          = obj.infer.smooth.G;
+%     sumP       = sum(cat(3,P{1:obj.d.T}),3);
+%     sumC       = 0;
+%     for tt = 1:obj.d.T-1
+%         sumC = sumC + P{tt+1} * G{tt}';
+%     end    
+% 
+%     sumC      = sumC;
+    s         = obj.suffStats(struct('bIgnoreHash', true));
     S1        = m(:,1:end-1);
     S2        = m(:,2:end);
-    sumP      = (sumP + sumP)./2;
-    A         = ds.utils.learnCGModel_EM(S1, S2, sumP, sumC, obj.par.A, 0, verbose);
+    
+    metric    = obj.par.Q; % doesn't seem to make a difference...?
+    metric    = eye(obj.d.x);
+%     sumP      = (sumP + sumP)./2;
+    A         = ds.utils.learnCGModel_EMQ(S1, S2, s.PHI, s.C', metric, curEstimate, verbose);
 end

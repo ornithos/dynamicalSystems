@@ -21,17 +21,17 @@ dsNewton.smooth;
 dsNewton.save('original-params');
 
 %%
-opts             = struct('maxiter', 1000, 'epsilon', 1e-3, 'sampleStability', Inf);
+opts             = struct('maxiter', 1000, 'epsilon', 1e-3, 'sampleStability', 10);
 dsNewton.parameterLearningEM(opts);
 dsNewton.save('learned-all-EM');
 
-dsNewton.useSavedParameters('original-params');
-dsNewton.parameterLearningEM(opts);
-dsNewton.save('learned-all-EM2');
-
-dsNewton.useSavedParameters('original-params');
-dsNewton.parameterLearningEM(opts);
-dsNewton.save('learned-all-EM3');
+% dsNewton.useSavedParameters('original-params');
+% dsNewton.parameterLearningEM(opts);
+% dsNewton.save('learned-all-EM2');
+% 
+% dsNewton.useSavedParameters('original-params');
+% dsNewton.parameterLearningEM(opts);
+% dsNewton.save('learned-all-EM3');
 %%
 
 ds.gui.posteriorGaussGUI(dsNewton, 'original-params', 'learned-all-EM');

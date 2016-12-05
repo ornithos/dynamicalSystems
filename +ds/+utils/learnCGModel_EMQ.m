@@ -1,10 +1,18 @@
-function M = learnCGModel_EM(S1,S2,Vsum,Csum,M_init,verbose)
+function M = learnCGModel_EMQ(S1, S2, Vsum, Csum, Q, M_init, verbose)
 % LEARNCGMODEL Learns the dynamics matrix of a Linear Dynamical System 
 % (LDS) from states using the constraint generation algorithm.
 %
+% (** ADAPTED FROM ORIGINAL FOR:
+%     - change metric by Q^{-1}, as per objective function; their EM
+%       variant seems to skip out on this.. Perhaps they assume Q = I?
+%  ** 2016-12-05  AB ***********************)
+%
+%  (AB) Note that while it is not really documented, the solver is actually
+%  optimising M' not M, and it is converted back in the end.
+%
 %  Syntax
 %  
-%    M = learnCGModel(S1,S2,Vsum,Csum,M_init,verbose)
+%    M = learnCGModel_EMQ(S1,S2,Vsum,Csum,Q,M_init,verbose)
 %
 %  Description
 %
@@ -66,22 +74,27 @@ minevals = [];
 scores = [];
 svals = [];
 
-d = size(S1,1);
+d = size(M_init,1);
 
 % calculating terms required for the quadratic objective function 
 % P,q,r (eqn 4 in paper)
 
 % C = S1*S1';
 % C2 = S2*S1';
+invQ  = inv(Q);
 Vsum = Vsum; %assuming always N > dx
 tmp = Csum; %assuming always N > dx
-q = tmp(:);
-P = zeros(d^2,d^2);
+% q = tmp(:);
+% P = zeros(d^2,d^2);
 
-for i = 1:d
-    P( (i-1)*d + 1 : (i-1)*d + d,   (i-1)*d + 1 : (i-1)*d + d) = Vsum;
-end
-P = (P +P')/2;    % numerical stability problems..
+% for i = 1:d
+%     P( (i-1)*d + 1 : (i-1)*d + d,   (i-1)*d + 1 : (i-1)*d + d) = Vsum;
+% end
+% P = (P +P')/2;    % numerical stability problems..
+P    = kron(invQ, Vsum);
+P    = (P +P')/2;    % numerical stability problems..
+CTQI = Csum*invQ;    % Csum is already C^T
+q    = CTQI(:);
 
 %r = trace(S2*S2');
 r = 0;
@@ -92,8 +105,9 @@ h = [];
 
 % first M is learned unconstrained
 %fprintf('calculating initial M...\n');
+M_init = M_init';
 %M = pinv(S1')*S2';
-M = M_init';
+M = M_init;
 lsscore = norm(S1'*M - S2','fro')^2;
 if verbose; fprintf('frob score = %.4f\n',lsscore); end
 
@@ -142,7 +156,7 @@ for i = 1:1000
     % We want to minimize m'*P*m - 2*q'*m + r, whereas    
     % for quadprog, the objective is to minimize x'*H*x/2  + f'*x
     % with constraints Gx - h <= 0, so have to flip some signs ..
-    [m,val] = quadprog(2*P,2*(-q),G,h,[],[],[],[],M(:), options);
+    [m,val] = quadprog(2*P,2*(-q),G,h,[],[],[],[],M_init(:), options);
 
 %    CAN ALSO USE CVX INSTEAD OF QUADPROG:
 %    val = 0;
@@ -261,7 +275,15 @@ if true %~simulate_LB1
 
 end
 
-M = M';  % returning dynamics matrix in proper orientation
+% if initial was actually better (possible due to constraints imposed in
+% QP - however it will not be by much)
+
+% returning dynamics matrix in proper orientation
+if M_init(:)'*P*M_init(:) -2*M_init(:)'*q < Mbest(:)'*P*Mbest(:) -2*Mbest(:)'*q
+    M = M_init';
+else
+    M = M';
+end
 
 end
 

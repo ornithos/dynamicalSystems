@@ -8,7 +8,7 @@ if nargin < 2 || isempty(opts)
 end
 
 optsDefault  = struct('verbose', true, 'bIgnoreHash', false);
-opts         = utils.struct.structCoalesce(opts, optsDefault);
+opts         = utils.base.parse_argumentlist(opts, optsDefault);
     
 % Check for existence of Smoothed estimates
 if ~opts.bIgnoreHash && obj.parametersChanged

@@ -285,13 +285,14 @@ classdef dynamicalSystem < handle
           if nargin < 4; opts = struct; end
           if nargin < 3; utpar = struct; end
           if nargin < 2; fType = []; end
+          tmpobj = obj;
           tmpobj.filter(fType, true, utpar, opts);
           llh    = tmpobj.infer.llh;
       end
       
       % --- prototypes -------------------
       % inference / learning 
-      obj = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
+      [a,q] = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
 %       obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
 %       obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
 %       obj = filterUnscented(obj, bDoLLH, bDoValidation, utpar); % Unscented (UKF) Filter
