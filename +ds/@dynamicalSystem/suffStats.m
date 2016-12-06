@@ -28,6 +28,10 @@ G     = vertcat(obj.infer.smooth.x0.G, obj.infer.smooth.G);
 y     = obj.y;
 T     = obj.d.T;
 
+if any(obj.hasControl)
+    U = [zeros(obj.d.u, 1), obj.u];
+end
+
 % mu    indexes from 0:T     (T+1 elements)
 % sigma indexes from 0:T     (T+1 elements)
 % G     indexes from 0:(T-1) (T   elements)
@@ -46,6 +50,24 @@ for tt = 1:T
     s.C = s.C + sigma{tt+1} * G{tt}';
 end
 s.C     = s.C./T;
+
+% ----- Control quantities -----------------------------------
+if obj.hasControl(1)
+    s.X_Um1   = (mu(:,2:T+1) * U(:,1:T)')./T;
+    s.Xm1_U   = (mu(:,1:T)   * U(:,2:T+1)')./T;
+    s.U_Um1   = (U(:,2:T+1)  * U(:,1:T)')./T;
+end
+
+if obj.hasControl(2)
+    s.YU      = (y * U(:,2:T+1)')./T;
+end
+
+if any(obj.hasControl)
+    s.Um1Um1  = (U(:,1:T) * U(:,1:T)')./T;
+    s.Xm1Um1  = (mu(:,1:T) * U(:,1:T)')./T;   % same as 2:T (because U_1 == 0)
+    s.UU      = (s.Um1Um1 + U(:,T+1)*U(:,T+1)')./T;
+    s.XU      = (s.Xm1Um1 + mu(:,T+1) * U(:,T+1)')./T;  
+end
 
 s.infer = struct('mu', mu); s.infer.P = sigma; s.infer.G = G;   % hack to stop MATLAB making a struct array
 end

@@ -81,7 +81,12 @@ d = size(M_init,1);
 
 % C = S1*S1';
 % C2 = S2*S1';
-invQ  = inv(Q);
+if isdiag(Q)
+    invQ = diag(1./diag(Q));
+else
+    invQ  = inv(Q);
+end
+
 Vsum = Vsum; %assuming always N > dx
 tmp = Csum; %assuming always N > dx
 % q = tmp(:);

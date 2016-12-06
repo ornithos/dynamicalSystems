@@ -43,7 +43,7 @@ else
     Cum     = zeros(obj.d.y,obj.d.x);
 end
 
-eps = 1e-6./obj.d.T;   % 'kind-of' prior to avoid instability in covariances.
+eps = 1e-8./obj.d.T;   % 'kind-of' prior to avoid instability in covariances.
 fOpts = struct('bDoValidation', false, 'bIgnoreHash', true);
 
 %% Parameter updates

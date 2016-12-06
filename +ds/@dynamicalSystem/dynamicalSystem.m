@@ -282,9 +282,9 @@ classdef dynamicalSystem < handle
       end
       
       function llh = logLikelihood(obj, fType, utpar, opts)
-          if nargin < 4; opts = struct; end
-          if nargin < 3; utpar = struct; end
-          if nargin < 2; fType = []; end
+          if nargin < 4 || isempty(opts); opts = struct; end
+          if nargin < 3 || isempty(utpar); utpar = struct; end
+          if nargin < 2 || isempty(fType); fType = []; end
           tmpobj = obj;
           tmpobj.filter(fType, true, utpar, opts);
           llh    = tmpobj.infer.llh;
@@ -311,7 +311,8 @@ classdef dynamicalSystem < handle
    end
    
    methods (Access = protected, Hidden=true)
-       obj = parameterLearningMStep(obj, verbose, updateOnly); % internals for EM
+       obj = parameterLearningMStep(obj, updateOnly, opts); % internals for EM
+       parameterLearningMStepNew(obj, updateOnly, opts);
        obj = validationInference(obj, doError); % Input validation
        
    end

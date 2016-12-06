@@ -21,9 +21,9 @@ dsNewton.smooth;
 dsNewton.save('original-params');
 
 %%
-opts             = struct('maxiter', 1000, 'epsilon', 1e-3, 'sampleStability', 10);
-dsNewton.parameterLearningEM(opts);
-dsNewton.save('learned-all-EM');
+opts             = struct('maxiter', 1000, 'epsilon', 1e-3, 'sampleStability', 10, 'multistep', 4);
+llh = dsNewton.parameterLearningEM(opts);
+dsNewton.save('learned-all-EM1');
 
 % dsNewton.useSavedParameters('original-params');
 % dsNewton.parameterLearningEM(opts);
