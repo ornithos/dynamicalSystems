@@ -146,9 +146,9 @@ function parameterLearningMStep(obj, updateOnly, opts)
         if obj.hasControl(2)
             % --- additions to covariance from control inputs ----
             C       = obj.par.C;
-            Cum     = C * s.XU';
-            Cum_H   = Cum * H';
-            R       = R + C*s.UU*C' - Cum - Cum' - Cum_H - Cum_H';
+            Cuy     = C * s.YU';
+            Cum_H   = C * s.XU' * H';
+            R       = R + C*s.UU*C' - Cuy - Cuy' - Cum_H - Cum_H';
         end
 
         % numerical imprecision (hopefully!) on symmetry

@@ -1,4 +1,4 @@
-function [a, q] = expLogJoint(obj)
+function [a, D] = expLogJoint(obj)
 
     tmpobj = obj;
     opts = struct; %struct('bIgnoreHash', true);
@@ -30,4 +30,8 @@ function [a, q] = expLogJoint(obj)
     
     q(4)    = -0.5*T*trace((tmpobj.par.R)\(s.D - s.B*H' - H*s.B' + H*s.SIGMA*H' + ctrlAdd));
     a       = sum(q);
+    
+    if nargout > 1
+        D = 0;
+    end
 end
