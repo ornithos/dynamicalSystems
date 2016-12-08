@@ -64,7 +64,7 @@ end
 
 if any(obj.hasControl)
     s.Um1Um1  = (U(:,1:T) * U(:,1:T)')./T;
-    s.Xm1Um1  = (mu(:,1:T) * U(:,1:T)')./T;   % same as 2:T (because U_1 == 0)
+    s.Xm1Um1  = (mu(:,1:T) * U(:,1:T)')./T;   % same as 2:T (because U(:,1) == 0)
     s.UU      = (s.Um1Um1 + U(:,T+1)*U(:,T+1)')./T;
     s.XU      = (s.Xm1Um1 + mu(:,T+1) * U(:,T+1)')./T;  
 end

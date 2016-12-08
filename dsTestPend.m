@@ -24,8 +24,6 @@ dsPend.smooth('ukf');
 dsPend.save(':UKF');
 ds.gui.posteriorGaussGUI(dsPend, ':EKF', ':UKF');
 
-%%
-dsPend.filterMix('EKF');
 
 %% Sarkka stuff
 % ... run pendulum_sim ...

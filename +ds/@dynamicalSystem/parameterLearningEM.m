@@ -125,11 +125,6 @@ for ii = 1:opts.maxiter
     prevA         = obj.par.A;
 %     prevLLH       = obj.logLikelihood;
     obj.parameterLearningMStep({'A', 'B'}, mstepOpts);
-    A = obj.par.A;
-    if obj.hasControl(1); B = obj.par.B; end
-    obj.parameterLearningMStepNew({'A', 'B'}, mstepOpts);
-    dif = norm(A - obj.par.A); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for A differs by: %.8f\n', dif); end
-    if obj.hasControl(1); dif = norm(B - obj.par.B); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for B differs by: %.8f\n', dif); end; end
     
     % Check for stability of A: significant problems when A blows up.
     prevStepWasConstrained = false;
@@ -155,63 +150,28 @@ for ii = 1:opts.maxiter
     % Q, H, R
     switch multiStep
         case 4
-            obj.parameterLearningMStep({'Q','H','C','R'}, mstepOpts);
-            Q = obj.par.Q;
-            H = obj.par.H;
-            R = obj.par.R;
-            if obj.hasControl(1); C = obj.par.C; end
-            obj.parameterLearningMStepNew({'Q','H','C','R'}, mstepOpts);
-            dif = norm(Q - obj.par.Q); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for Q differs by: %.8f\n', dif); end
-            dif = norm(H - obj.par.H); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for H differs by: %.8f\n', dif); end
-            dif = norm(R - obj.par.R); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for R differs by: %.8f\n', dif); end
-            if obj.hasControl(2); dif = norm(C - obj.par.C); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for C differs by: %.8f\n', dif); end; end
-    
+            obj.parameterLearningMStep({'Q','H','R'}, mstepOpts);
         case 2
             obj.parameterLearningMStep({'Q'}, mstepOpts);
-            Q = obj.par.Q;
-            obj.parameterLearningMStepNew({'Q'}, mstepOpts);
-            dif = norm(Q - obj.par.Q); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for Q differs by: %.8f\n', dif); end
-            
             obj.filter('Kalman', true, [], fOpts);
             obj.smooth('Linear', [], fOpts);
-            obj.parameterLearningMStep({'H','C','R'}, mstepOpts);
-            H = obj.par.H;
-            R = obj.par.R;
-            if obj.hasControl(1); C = obj.par.C; end
-            obj.parameterLearningMStepNew({'H','C','R'}, mstepOpts);
-            dif = norm(H - obj.par.H); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for H differs by: %.8f\n', dif); end
-            dif = norm(R - obj.par.R); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for R differs by: %.8f\n', dif); end
-            if obj.hasControl(2); dif = norm(C - obj.par.C); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for C differs by: %.8f\n', dif); end; end
-            
+            obj.parameterLearningMStep({'H','R'}, mstepOpts);
         case 1
             obj.filter('Kalman', true, [], fOpts);
             obj.smooth('Linear', [], fOpts);
             dbgLLH.A  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
             
             obj.parameterLearningMStep({'Q'}, mstepOpts);
-            Q = obj.par.Q;
-            obj.parameterLearningMStepNew({'Q'}, mstepOpts);
-            dif = norm(Q - obj.par.Q); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for Q differs by: %.8f\n', dif); end
-            
             obj.filter('Kalman', true, [], fOpts);
             obj.smooth('Linear', [], fOpts);
             dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh];
             
-            obj.parameterLearningMStep({'H', 'C'}, mstepOpts);
-            H = obj.par.H;
-            if obj.hasControl(1); C = obj.par.C; end
-            obj.parameterLearningMStepNew({'H','C'}, mstepOpts);
-            dif = norm(H - obj.par.H); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for H differs by: %.8f\n', dif); end
-            if obj.hasControl(2); dif = norm(C - obj.par.C); if dif > 1e-8; iterBar.clearConsole; fprintf('new M-step for C differs by: %.8f\n', dif); end; end
-            
+            obj.parameterLearningMStep({'H'}, mstepOpts);
             obj.filter('Kalman', true, [], fOpts);
             obj.smooth('Linear', [], fOpts);
             dbgLLH.H  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh];
             
             obj.parameterLearningMStep({'R'}, mstepOpts);
-            R = obj.par.R;
-            obj.parameterLearningMStepNew({'R'}, mstepOpts);
-            dif = norm(R - obj.par.R); iterBar.clearConsole; if dif > 1e-8; fprintf('new M-step for R differs by: %.8f\n', dif); end
         otherwise
             error('Param Learning: FAIL. multiStep NOT IN (1,2,4)');
     end
