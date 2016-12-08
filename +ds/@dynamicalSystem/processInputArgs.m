@@ -1,4 +1,4 @@
-function obj = processInputArgs(obj, args)
+function processInputArgs(obj, args)
 % dynamicalSystem(dim_x, dim_y, 'evolution', {A || f || []}, {Df, Q},
    %                 'emission', {H || h || []}, {Dh, R},
    %                 'data', {y || T},
@@ -176,16 +176,17 @@ function [obj, tests] = internalProcessEvo(obj, arg)
     obj.evoLinear = false;
     %{A || f || []}, {Df, Q}
     if isnumeric(arg{1})
-        assert(all(size(arg{1})==[obj.d.x, obj.d.x]), 'matrix A is not conformable to dim(x)');
-        obj.par.A = arg{1};
-        obj.evoLinear = true;
+        if isempty(arg{1})
+            % unknown transition matrix
+            obj.evoLinear = true;
+        else
+            assert(all(size(arg{1})==[obj.d.x, obj.d.x]), 'matrix A is not conformable to dim(x)');
+            obj.par.A = arg{1};
+            obj.evoLinear = true;
+        end
     elseif isa(arg{1}, 'function_handle')
         obj.par.f = arg{1};
-        if obj.evoNLhasParams
-            f = @(x) obj.par.f(x, obj.evoNLParams);
-        else
-            f = obj.par.f;
-        end
+        f = obj.par.f;
         tests = {@(u) internalTestFun(f, 'f', u, false, obj.d.x, [obj.d.x,1])};
     else
         error('Unknown argument type (%s) in Evolution argument %d', class(arg{1}), 1);
@@ -195,21 +196,27 @@ function [obj, tests] = internalProcessEvo(obj, arg)
     exhaustFn = false;
     for ii = 2:nargs
         if isnumeric(arg{ii}) && ~exhaustNum
+            if numel(arg{ii}) == 1
+                arg{ii} = arg{ii} * eye(obj.d.x);
+            end
             assert(all(size(arg{ii})==[obj.d.x, obj.d.x]), 'matrix Q is not conformable to dim(x)');
             obj.par.Q      = arg{ii};
             exhaustNum = true;
         elseif isa(arg{ii}, 'function_handle') && ~exhaustFn
             obj.par.Df = arg{ii};
             if obj.evoNLhasParams
-                f = @(x) obj.par.Df(x, obj.evoNLParams);
+                f = @(x) obj.par.Df(x, obj.par.evoNLParams);
             else
                 f = obj.par.Df;
             end
             tests{end+1} = @(u) internalTestFun(f, 'Df', u, true, obj.d.x, [obj.d.x, obj.d.x]);  %#ok
             exhaustFn = true;
         elseif isstruct(arg{ii})
-            obj.evoNLParams = arg{ii};
+            obj.par.evoNLParams = arg{ii};
             obj.evoNLhasParams = true;
+            f = @(x) obj.par.f(x, obj.par.evoNLParams);
+            % replace the previous test with parameterised fn
+            tests{end} = @(u) internalTestFun(f, 'f', u, false, obj.d.x, [obj.d.x,1]);
         else
             error('Don''t know what to do with argument %d in Evolution section', ii);
         end
@@ -231,11 +238,7 @@ function [obj,tests] = internalProcessEmi(obj, arg)
         obj.emiLinear = true;
     elseif isa(arg{1}, 'function_handle')
         obj.par.h = arg{1};
-        if obj.emiNLhasParams
-            f = @(x) obj.par.h(x, obj.emiNLParams);
-        else
-            f = obj.par.h;
-        end
+        f = obj.par.h;
         tests{end+1} = @(u) internalTestFun(f, 'h', u, false, obj.d.x, [obj.d.y,1]);
     else
         error('Unknown argument type (%s) in Emission argument %d', class(arg{1}), 1);
@@ -245,13 +248,16 @@ function [obj,tests] = internalProcessEmi(obj, arg)
     exhaustFn = false;
     for ii = 2:nargs
         if isnumeric(arg{ii}) && ~exhaustNum
+            if numel(arg{ii}) == 1
+                arg{ii} = arg{ii} * eye(obj.d.y);
+            end
             assert(all(size(arg{ii})==[obj.d.y, obj.d.y]), 'matrix R is not conformable to dim(y)');
             obj.par.R      = arg{ii};
             exhaustNum = true;
         elseif isa(arg{ii}, 'function_handle') && ~exhaustFn
             obj.par.Dh = arg{ii};
             if obj.emiNLhasParams
-                f = @(x) obj.par.Dh(x, obj.emiNLParams);
+                f = @(x) obj.par.Dh(x, obj.par.emiNLParams);
             else
                 f = obj.par.Dh;
             end
@@ -259,6 +265,9 @@ function [obj,tests] = internalProcessEmi(obj, arg)
         elseif isstruct(arg{ii})
             obj.par.emiNLParams = arg{ii};
             obj.emiNLhasParams = true;
+            f = @(x) obj.par.h(x, obj.par.emiNLParams);
+            % replace the previous test with parameterised fn
+            tests{end} = @(u) internalTestFun(f, 'f', u, false, obj.d.x, [obj.d.y,1]);
         else
             error('Don''t know what to do with argument %d in Emission section', ii);
         end
@@ -367,7 +376,7 @@ end
 
 
 function internalTestFun(f, nm, u, isDif, inputDim, outputDim)
-    try
+    try 
         if isempty(u)
             fRng = f(ones(inputDim,1));
         else
