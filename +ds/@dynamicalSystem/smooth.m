@@ -1,4 +1,4 @@
-function obj = smooth(obj, sType, utpar, opts)
+function smooth(obj, sType, utpar, opts)
     % smooth(obj, bDoLLH, bDoValidation, utpar)
     % Dynamical System Smoothing for general dynamics as described in eg. 
     % Särkkä (2013). If the transition dynamics are non-linear, the

@@ -292,29 +292,29 @@ classdef dynamicalSystem < handle
       
       % --- prototypes -------------------
       % inference / learning 
-      [a,q] = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
+      [a,q]         = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
 %       obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
 %       obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
 %       obj = filterUnscented(obj, bDoLLH, bDoValidation, utpar); % Unscented (UKF) Filter
-      obj = filter(obj, fType, bDoLLH, utpar, opts) % one of dynamics linear, other piped to NL.
-      obj = getGradient(obj, par, doCheck) % get gradient of parameters
+      filter(obj, fType, bDoLLH, utpar, opts) % one of dynamics linear, other piped to NL.
+      D             = getGradient(obj, par, doCheck) % get gradient of parameters
 %       obj = smoothLinear(obj, bDoValidation); % RTS Smoother
 %        obj = smoothExtended(obj, bDoValidation); % Extended (EKF) RTS Smoother
 %       obj = smoothUnscented(obj, bDoValidation, utpar); % Unscented (UKF) RTS Smoother
-      obj = smooth(obj, fType, utpar, opts) % one of dynamics linear, other piped to NL.
-      obj = ssid(obj, L);  % Subspace ID
-      [obj, llh, niters] = parameterLearningEM(obj, opts);
+      smooth(obj, fType, utpar, opts) % one of dynamics linear, other piped to NL.
+      ssid(obj, L);  % Subspace ID
+      [llh, niters] = parameterLearningEM(obj, opts);
+      lhHist        = parameterLearnOnline(obj, fType, opts, utpar)
       
-      obj = suffStats(obj, opts);  % Sufficient statistics required for learning
+      s             = suffStats(obj, opts);  % Sufficient statistics required for learning
       % graphical
       plotStep2D(obj, posteriorType)
    end
    
    methods (Access = protected, Hidden=true)
-       obj = parameterLearningMStep(obj, updateOnly, opts); % internals for EM
-       parameterLearningMStepNew(obj, updateOnly, opts);
-       obj = validationInference(obj, doError); % Input validation
-       
+       parameterLearningMStep(obj, updateOnly, opts); % internals for EM
+       ok  = validationInference(obj, doError); % Input validation
+       out = parameterHash(obj);
    end
    
    methods (Access = private)

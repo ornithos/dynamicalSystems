@@ -1,4 +1,4 @@
-function obj = filter(obj, fType, bDoLLH, utpar, opts)
+function filter(obj, fType, bDoLLH, utpar, opts)
     % filter(obj, fType, bDoLLH, utpar, opts)
     % Dynamical System Filtering for general dynamics as described in eg. 
     % Särkkä (2013). If transition and/or emission dynamics are non-linear, 

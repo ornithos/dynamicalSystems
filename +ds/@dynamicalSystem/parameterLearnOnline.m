@@ -1,4 +1,4 @@
-function [obj, llhHist] = parameterLearnOnline(obj, fType, opts, utpar)
+function llhHist = parameterLearnOnline(obj, fType, opts, utpar)
 
     %% Process arguments
     if nargin < 4 || isempty(utpar)
