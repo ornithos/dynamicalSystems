@@ -65,9 +65,24 @@ end
 if any(obj.hasControl)
     s.Um1Um1  = (U(:,1:T) * U(:,1:T)')./T;
     s.Xm1Um1  = (mu(:,1:T) * U(:,1:T)')./T;   % same as 2:T (because U(:,1) == 0)
-    s.UU      = (s.Um1Um1 + U(:,T+1)*U(:,T+1)')./T;
-    s.XU      = (s.Xm1Um1 + mu(:,T+1) * U(:,T+1)')./T;  
+    s.UU      = (s.Um1Um1.*T + U(:,T+1)*U(:,T+1)')./(T);   % not T+1, since should be 2:T, only first el = 0.
+    s.XU      = (s.Xm1Um1.*T + mu(:,T+1) * U(:,T+1)')./(T);  
 end
 
 s.infer = struct('mu', mu); s.infer.P = sigma; s.infer.G = G;   % hack to stop MATLAB making a struct array
+
+% purely for debugging EM
+% Q1 = zeros(obj.d.y);
+% Q2 = zeros(obj.d.y);
+% Xm1_U = zeros(size(s.Xm1_U));
+% for tt = 1:T
+%     Xm1_U = Xm1_U + mu(:,tt)*U(:,tt+1)';
+%     Q1 = Q1 + (mu(:, tt+1) - obj.par.A * mu(:, tt) - obj.par.B * U(:, tt+1))*(mu(:, tt+1) - obj.par.A * mu(:, tt) - obj.par.B * U(:, tt+1))';
+%     Q2 = Q2 + (mu(:, tt+1) - obj.par.A * mu(:, tt))*(mu(:, tt+1) - obj.par.A * mu(:, tt))';
+%     Q1 = Q1 + sigma{tt+1} - sigma{tt+1}*G{tt}'*obj.par.A' - obj.par.A*G{tt}*sigma{tt+1}' + obj.par.A*sigma{tt}*obj.par.A';
+%     Q2 = Q2 + sigma{tt+1} - sigma{tt+1}*G{tt}'*obj.par.A' - obj.par.A*G{tt}*sigma{tt+1}' + obj.par.A*sigma{tt}*obj.par.A';
+% end
+% s.Q1 = Q1./T;
+% s.Q2 = Q2./T;
+% s.Xm1_U2 = Xm1_U./T;
 end

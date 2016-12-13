@@ -4,7 +4,7 @@ if nargin < 2 || isempty(opts); opts = struct; end
 optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL', 5, ...
                         'verbose', true, 'dbg', false, 'validation', false, ...
                         'multistep', 4, 'diagQ', false, 'diagR', false, ...
-                        'sampleStability', 1, 'stableVerbose', false);
+                        'sampleStability', 1, 'stableVerbose', false, 'optimType', 'analytic');
 optsDefault     = utils.base.parse_argumentlist(obj.opts, optsDefault, false);      % bring in global opts
 opts            = utils.base.parse_argumentlist(opts, optsDefault, false);          % add user specified opts.
 
@@ -51,7 +51,20 @@ for oname = optFds   % fixA, fixQ, fix....
 end
 
 % Optimisation options
-optimOpts          = optimoptions('fminunc','Algorithm','quasi-newton','SpecifyObjectiveGradient',true,'Display', 'iter-detailed'); % 'CheckGradients',true, 'FiniteDifferenceType', 'central', 
+optimDisplay       = 'none';    % 'iter-detailed'
+% optimType          = 'analytic';  % 'auto', 'analytic', 'debug-analytic'
+
+optimOpts          = optimoptions('fminunc','Algorithm','quasi-newton','Display', optimDisplay);
+switch opts.optimType
+    case 'analytic'
+        optimOpts = optimoptions(optimOpts, 'SpecifyObjectiveGradient',true); 
+    case 'analytic-debug'
+        optimOpts = optimoptions(optimOpts, 'CheckGradients',true, 'FiniteDifferenceType', 'central');
+    case 'auto'
+        optimOpts = optimoptions(optimOpts, 'FiniteDifferenceType', 'forward');
+    otherwise
+        error('unknown optimType specified. Choose from ''auto'', ''analytic'', ''analytic-debug''');
+end
 optimEmi.options   = optimOpts;
 optimEmi.objective = @(x) ds.utilIONLDS.derivEmiWrapper(obj, x);
 optimEmi.solver    = 'fminunc';
@@ -97,7 +110,7 @@ for ii = 1:opts.maxiter
     % --- if prev step constrained, we may have seen a drop in LLH.
     %     However, we do not expect this in the case where sampleStability
     %     is 1 since should still be monotonic if every iter stable.
-    if delta < -1e-8 && ~(prevStepWasConstrained && ~(sampleStability == 1))
+    if delta < -1e-8 && ~(prevStepWasConstrained && ~(opts.sampleStability == 1))
         iterBar.updateText([iterBar.text, '*']);
         if multiStep == 1
             % basically things have gone really wrong by here..
@@ -131,7 +144,8 @@ for ii = 1:opts.maxiter
     % ____ Canonical parameters ___________________________________________
     prevA         = obj.par.A;
 %     prevLLH       = obj.logLikelihood;
-    obj.parameterLearningMStep({'A', 'B'}, mstepOpts);
+    obj.parameterLearningMStep({'A','B'}, mstepOpts);
+%     obj.parameterLearningMStep({'B'}, mstepOpts);
     
     % Check for stability of A: significant problems when A blows up.
     prevStepWasConstrained = false;
@@ -155,33 +169,43 @@ for ii = 1:opts.maxiter
     end
     
         if multiStep == 1       
-            obj.filter('Kalman', true, [], fOpts);
-            obj.smooth('Linear', [], fOpts);
+            obj.filter('ukf', true, [], fOpts);
+            obj.smooth('ukf', [], fOpts);
             dbgLLH.A  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
         end
     
     obj.parameterLearningMStep({'Q'}, mstepOpts);
         if multiStep < 4        
-            obj.filter('Kalman', true, [], fOpts);
-            obj.smooth('Linear', [], fOpts);
-            if multistep==1; dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh]; end
+            obj.filter('ukf', true, [], fOpts);
+            obj.smooth('ukf', [], fOpts);
+            if multiStep==1; dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh]; end
         end
        
     % ========= Optimise Nonlinear emission function ===================
+    if ~strcmp(optimDisplay, 'none')
+        fprintf('\n');
+        iterBar.currOutputLen = 0;
+    end
     emiOptOut     = fminunc(optimEmi);  % <- magic happens here
     optimEmi.x0   = emiOptOut;
     obj.par.emiNLParams.eta   = reshape(emiOptOut(1:obj.d.y*4), obj.d.y, 4);
-    obj.par.emiNLParams.C     = reshape(emiOptOut((obj.d.y*4+1):end), obj.d.y, obj.d.y);
+    obj.par.emiNLParams.C     = reshape(emiOptOut((obj.d.y*4+1):end), obj.d.y, obj.d.x);
     
         if multiStep < 4  
-            obj.filter('Kalman', true, [], fOpts);
-            obj.smooth('Linear', [], fOpts);
+            obj.filter('ukf', true, [], fOpts);
+            obj.smooth('ukf', [], fOpts);
             if multiStep==1; dbgLLH.H  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh]; end
         end
     
     % ========= Calculate R ============================================
     [~,M2]        = ds.utilIONLDS.utTransform_ymHx(obj);
     obj.par.R     = M2 ./ obj.d.T;
+    
+    % ========= (:?) INITIAL DISTN =====================================
+    % Not entirely comfortable about this
+    obj.par.x0.mu    = obj.infer.smooth.x0.mu;
+    obj.par.x0.sigma = obj.infer.smooth.x0.sigma;
+    
     
     % update console
     if opts.verbose && ~opts.dbg

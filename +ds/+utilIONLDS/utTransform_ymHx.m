@@ -11,8 +11,8 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx(obj, alpha, beta, kappa)
     assert(isfield(emiParams, 'C'), 'parameter C not found in emission parameters');
     C         = emiParams.C;
     emiParams = emiParams.eta;
-    assert(isnumeric(emiParams) && (all(size(emiParams) == [1, 4]) || all(size(emiParams) == [n, 4])), ...
-        'emiParams.eta must be a matrix of size (1, 4) or (d.x, 4)');
+    assert(isnumeric(emiParams) && (all(size(emiParams) == [1, 4]) || all(size(emiParams) == [d, 4])), ...
+        'emiParams.eta must be a matrix of size (1, 4) or (d.y, 4)');
     
     if nargin == 1
         alpha = 1;
@@ -30,7 +30,7 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx(obj, alpha, beta, kappa)
     scl      = sqrt(n + lambda);
     
     CX       = zeros(d, 2*n + 1, obj.d.T);
-    XSP      = zeros(d, (2*n + 1)*obj.d.T);
+    XSP      = zeros(n, (2*n + 1)*obj.d.T);
 
     for tt = 1:obj.d.T
         sigma    = obj.infer.smooth.sigma{tt};

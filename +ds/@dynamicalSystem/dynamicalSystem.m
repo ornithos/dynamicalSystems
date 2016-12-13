@@ -109,7 +109,7 @@ classdef dynamicalSystem < handle
          
       end
       
-      function obj = generateData(obj)
+      function generateData(obj)
           obj.x       = zeros(obj.d.x, obj.d.T+1);
           obj.y       = zeros(obj.d.y, obj.d.T);
           obj.x(:,1)  = obj.par.x0.mu;
@@ -137,8 +137,30 @@ classdef dynamicalSystem < handle
           new                = ds.dynamicalSystem(this);
           this.opts.warnings = curWarns;
       end
-        
-      function obj = useSavedParameters(obj, savedName, verbose)
+      
+      function getFittedValues(obj)
+          if ~strcmp(obj.infer.fpHash, obj.parameterHash)
+              if obj.opts.warnings; fprintf('FITVALUES: posterior does not match current parameters'); end
+              if obj.evoLinear && obj.emiLinear
+                  if obj.opts.warnings; fprintf('... fixed!\n'); end
+                  ftype = obj.infer.fType;
+                  stype = obj.infer.sType;
+                  obj.filter(ftype);
+                  obj.smooth(stype);
+              else
+                  error('Unable to get fitted values: posterior does not match parameters. Please run a posterior algm');
+              end
+          end
+          fitted = zeros(obj.d.y, obj.d.T);
+          for tt = 1:obj.d.T
+              u_t = [];
+              if any(obj.hasControl); u_t = obj.u(:,tt); end
+              fitted(:,tt) = obj.doEmission(obj.infer.smooth.mu(:,tt), u_t);
+          end
+          obj.yhat = fitted;
+      end
+      
+      function useSavedParameters(obj, savedName, verbose)
           if nargin < 3 || isempty(verbose); verbose = obj.opts.verbose; end
           idx     = obj.stackFind(savedName);
           svPoint = obj.stack{idx, 1};
@@ -152,7 +174,7 @@ classdef dynamicalSystem < handle
       end
       
       % ---- Save stack handlers -----------------------
-      function obj = stackPush(obj, insertion, descr)
+      function stackPush(obj, insertion, descr)
           maxIdx = size(obj.stack, 1);
           if obj.stackptr >= maxIdx
               obj.stack = [obj.stack; cell(100,2)];
@@ -165,7 +187,7 @@ classdef dynamicalSystem < handle
           obj.stack{obj.stackptr,2} = descr;
       end
         
-      function obj = stackDelete(obj, pos)
+      function stackDelete(obj, pos)
           if obj.stackptr <= 0
               fprintf('Empty save stack. Nothing to do.\n');
               return;
@@ -218,7 +240,7 @@ classdef dynamicalSystem < handle
       % ------------------------------------------------
         
       % ----- save / stack aliases ------------------------
-      function obj = save(obj, descr)
+      function save(obj, descr)
           assert(nargin == 2, 'please provide a description');
           if ~strcmp(obj.infer.fpHash, obj.parameterHash)
               if obj.opts.warnings; fprintf('SAVE: posterior does not match current parameters'); end
@@ -236,7 +258,7 @@ classdef dynamicalSystem < handle
           insertion         = struct;
           insertion.par     = obj.par;
           insertion.infer   = obj.infer;
-          obj               = stackPush(obj, insertion, descr);
+          stackPush(obj, insertion, descr);
       end
       
       function descr = savedList(obj)
@@ -294,7 +316,7 @@ classdef dynamicalSystem < handle
           if nargin < 4 || isempty(opts); opts = struct; end
           if nargin < 3 || isempty(utpar); utpar = struct; end
           if nargin < 2 || isempty(fType); fType = []; end
-          tmpobj = obj;
+          tmpobj = obj.copy;
           tmpobj.filter(fType, true, utpar, opts);
           llh    = tmpobj.infer.llh;
       end
@@ -336,7 +358,8 @@ classdef dynamicalSystem < handle
                   if obj.hasControl(1); out = out + obj.par.B * u; end
             else
                 [f,~,~,~]    = obj.functionInterfaces;
-                out          = f(input, u);
+                if ~obj.hasControl(1), out = f(input);
+                else, out = f(input, u); end
             end
         end
         function out = doEmission(obj, input, u)
@@ -345,7 +368,8 @@ classdef dynamicalSystem < handle
                  if obj.hasControl(2); out = out + obj.par.C * u; end
             else
                 [~,~,h,~]    = obj.functionInterfaces;
-                out          = h(input, u);
+                if ~obj.hasControl(2), out = h(input);
+                else, out = h(input, u); end
             end
         end
         % ------------------------------------------------
@@ -356,9 +380,11 @@ classdef dynamicalSystem < handle
        function val = isnummat(x)
            val = isnumeric(x) && ismatrix(x);
        end
+       
        function val = isnumscal(x)
            val = isnumeric(x) && isscalar(x);
        end
+       
        val = obj.parameterHash;
    end
 end

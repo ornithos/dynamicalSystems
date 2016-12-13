@@ -105,7 +105,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
             B       = obj.par.B;
             Bum     = B * s.XU';
             BuAm_m  = B * s.Xm1_U' * A';
-            Q       = Q + B*s.UU*B' - Bum - Bum' - BuAm_m - BuAm_m';
+            Q       = Q + B*s.UU*B' - Bum - Bum' + BuAm_m + BuAm_m';
         end
 
         % numerical imprecision (hopefully!) on symmetry 
@@ -151,7 +151,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
             C       = obj.par.C;
             Cuy     = C * s.YU';
             Cum_H   = C * s.XU' * H';
-            R       = R + C*s.UU*C' - Cuy - Cuy' - Cum_H - Cum_H';
+            R       = R + C*s.UU*C' - Cuy - Cuy' + Cum_H + Cum_H';
         end
 
         % numerical imprecision (hopefully!) on symmetry

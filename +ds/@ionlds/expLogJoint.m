@@ -48,7 +48,8 @@ function [a, D] = expLogJoint(obj, utpar)
         %           (useful quantities #1)
         
         CXSP         = obj.par.emiNLParams.C * XSP;
-        expmgCX      = exp(-bsxfun(@times, gamma, CXSP));
+        gCX          = bsxfun(@times, gamma, CXSP);
+        expmgCX      = exp(-gCX);
         denom        = 1 + expmgCX;
         denomPowNu   = bsxfun(@power, denom, 1./nu);
 
@@ -56,15 +57,16 @@ function [a, D] = expLogJoint(obj, utpar)
         % *** and we can reduce storage by concatenating diags in matrix.
         dM2.M        = 1./denomPowNu;
         dM2.m        = 1 - dM2.M;
-        dM2.nu       = bsxfun(@times, (M-m)./(nu.^2), log(1 + expmgCX)./denomPowNu);
+        
+        log1PEGCX    = utils.math.log1pexp(-gCX);
+        dM2.nu       = bsxfun(@times, (M-m)./(nu.^2), log1PEGCX./denomPowNu);
         
         % FOR DEBUG>>>>
 %         testgrad     = utils.math.numgrad(@(x) testDeriv(obj, CXSP, x, 1, 3), 0, 1e-8);
         
         %           (useful quantities #2)
-        denomPowNuP1 = bsxfun(@power, denom, 1./nu + 1);
-        tmpGC        = bsxfun(@times, (M-m)./(nu), 1./denomPowNuP1);
-        tmpGC        = tmpGC .* expmgCX;
+        denom2       = (1+exp(gCX)).*denom;
+        tmpGC        = bsxfun(@times, (M-m)./(nu), 1./denom2);
         
         dM2.gamma    = tmpGC .* CXSP;
         dM2.C        = bsxfun(@times, tmpGC, gamma);   
