@@ -1,12 +1,11 @@
-function out = gen_sigmoid(X, par)
+function out = gen_sigmoid(X, eta)
 
-    % par must be (1 x 4) matrix
+    % eta must be (1 x 4) matrix
     %         or  (n x 4) matrix
     %  matrix of parameters, where n is the dimension of x.
     
-    eta   = par.eta;   % par has eta field
-    M     = eta(:,1);
-    m     = eta(:,2);
+    m     = eta(:,1);
+    M     = eta(:,2);
     nu    = eta(:,3);
     gamma = eta(:,4);
     

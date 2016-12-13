@@ -24,8 +24,6 @@ function parameterLearningMStep(obj, updateOnly, opts)
     if nargin < 3 || isempty(opts)
         opts = struct;
     end
-    optsDefault = struct('verbose', true, 'diagQ', false, 'diagR', false);
-    opts        = utils.base.parse_argumentlist(opts, optsDefault, true);
 
     if isempty(updateOnly)
         updateOnly = {'A','B','Q','H','C','R'};
@@ -36,8 +34,9 @@ function parameterLearningMStep(obj, updateOnly, opts)
     % obtain fixed quantities, and remove from update list.
     origUpdates = updateOnly;
     optFds      = fieldnames(opts);
-    for oname = optFds   % fixA, fixQ, fix....
-        if strcmp(oname{1}(1:3), 'fix')
+    for oo = 1:numel(optFds)   % fixA, fixQ, fix....
+        oname = optFds{oo};
+        if strcmp(oname(1:3), 'fix')
             rmUpdate = upper(oname(4:end));
             % must search for validity seperately to remove statement,
             % since M-step generally does not include all possible vars.
@@ -48,6 +47,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
             if opts.(oname) && any(findel)
                 updateOnly(findel) = [];
             end
+            opts = rmfield(opts, oname);
         end
     end
     
@@ -57,7 +57,10 @@ function parameterLearningMStep(obj, updateOnly, opts)
         end
         return
     end
-            
+    
+    optsDefault = struct('verbose', true, 'diagQ', false, 'diagR', false);
+    opts        = utils.base.parse_argumentlist(opts, optsDefault, true);
+    
     % get all sufficient statistics
     s   = obj.suffStats(struct('bIgnoreHash', true));
 
