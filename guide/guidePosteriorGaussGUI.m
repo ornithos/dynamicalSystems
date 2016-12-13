@@ -144,15 +144,21 @@ for tt = 1:dsobj.d.T
 %         handles.sp{2}.infer.smooth.yhatSigma{tt} = dsobj.par.H * handles.sp{2}.infer.smooth.sigma{tt} * dsobj.par.H' + dsobj.par.R;
 %     else
         % transform posterior mean into observation space
-        handles.yhat(:,tt) = dsobj.yhat(:,tt);
-        
+        if isempty(dsobj.yhat)
+            handles.yhat(:,tt) = dsobj.y(:,tt);
+        else
+            handles.yhat(:,tt) = dsobj.yhat(:,tt);
+        end 
+   
         for jj = 1:2
             for kk = 1:2
                 % filter
+
                 m_x           = handles.sp{jj}.infer.(F_S{kk}).mu(:,tt);
                 P_x           = handles.sp{jj}.infer.(F_S{kk}).sigma{tt};
                 pars          = getParams(handles.sp{jj}, 2, ftypes(jj,1));
-                [m_tt,P_tt,~] = ds.utils.assumedDensityTform(pars, m_x, P_x, u_t, ftypes(jj,1), utpars{jj,1});
+                if pars.control, u = u_t; else, u = []; end
+                [m_tt,P_tt,~] = ds.utils.assumedDensityTform(pars, m_x, P_x, u, ftypes(jj,1), utpars{jj,1});
                 handles.sp{jj}.infer.(F_S{kk}).yhat(:,tt) = m_tt;
                 handles.sp{jj}.infer.(F_S{kk}).yhatSigma{tt} = P_tt;
             end
@@ -419,7 +425,7 @@ function par = getParams(obj, stage, type)
             par.Q = obj.par.Q;
             if type == 0
                 par.A  = obj.par.A;
-                if ~isempty(obj.par.B)
+                if obj.hasControl(1)
                     par.B = obj.par.B;
                     par.control = true;
                 end
@@ -433,7 +439,7 @@ function par = getParams(obj, stage, type)
             par.Q = obj.par.R;
             if type == 0
                 par.A = obj.par.H;
-                if ~isempty(obj.par.C)
+                if obj.hasControl(2)
                     par.B = obj.par.C;
                     par.control = true;
                 end

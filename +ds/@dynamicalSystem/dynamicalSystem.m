@@ -128,6 +128,15 @@ classdef dynamicalSystem < handle
           end
           obj.x       = obj.x(:,2:end);
       end
+      
+      % Make a copy of a handle object.
+      function new = copy(this)
+          % Instantiate new object of the same class.
+          curWarns           = this.opts.warnings;
+          this.opts.warnings = false;
+          new                = ds.dynamicalSystem(this);
+          this.opts.warnings = curWarns;
+      end
         
       function obj = useSavedParameters(obj, savedName, verbose)
           if nargin < 3 || isempty(verbose); verbose = obj.opts.verbose; end

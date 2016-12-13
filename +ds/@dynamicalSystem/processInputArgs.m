@@ -7,9 +7,24 @@ function processInputArgs(obj, args)
    %                ('control', u, B, (C))
    %                opts)
    % Note that opts is identified purely by whether the last argument is a
-   % struct. 
+   % struct.
+   
         nargs = numel(args);
-         
+        
+        % Copy existing ds object by passing in as only argument.
+        if nargs == 1 && isa(args{1}, 'ds.dynamicalSystem')
+              % Copy all non-hidden properties.
+              p = properties(args{1});
+              for i = 1:length(p)
+                  obj.(p{i}) = args{1}.(p{i});
+              end
+              return
+        end
+        
+        if nargs < 4
+            error('Insufficient number of inputs. Need dim_x, dim_y, evolution, emission, data and x0');
+        end
+        
         % update options
         optsDefault     = struct('warnings', true, 'verbose', true);
         if isstruct(args{nargs})
@@ -64,7 +79,7 @@ function processInputArgs(obj, args)
                     isControl    = true;
                     % optional: no trackDone
                 otherwise
-                    error('Unknown section marker ''%d''', curSection);
+                    error('Unknown section marker ''%s''', curSection);
             end
             
             if jj + 1 >= nargs
@@ -79,6 +94,13 @@ function processInputArgs(obj, args)
                 warning('Input: ignoring character string ''%s''', args{ii+1});
                 ii         = ii + 1;
             end
+            
+        end
+        
+        % check we have everything
+        allSects = {'evo', 'emi', 'x0 ', 'dat'};
+        if ~all(trackDone)
+            error('No arguments for sections: %s', strjoin(allSects(~trackDone), ','));
         end
         
         %% This section processes arguments that have been seen already in
@@ -94,20 +116,20 @@ function processInputArgs(obj, args)
         end
         
         % test functions
-        for ii = 1:numel(testsEvo)
-            t = testsEvo{ii};
+        for ii = 1:size(testsEvo,1)
+            t = testsEvo{ii,1};
             if obj.hasControl(1)
-                t(ones(obj.d.u,1));
+                t(ones(obj.d.u,1), obj.par.evoNLParams);
             else
-                t([]);
+                t([], obj.par.evoNLParams);
             end
         end
-        for ii = 1:numel(testsEmi)
-            t = testsEmi{ii};
+        for ii = 1:size(testsEmi,1)
+            t = testsEmi{ii,1};
             if obj.hasControl(2)
-                t(ones(obj.d.u,1));
+                t(ones(obj.d.u,1), obj.par.emiNLParams);
             else
-                t([]);
+                t([], obj.par.emiNLParams);
             end
         end
         
@@ -123,12 +145,6 @@ function processInputArgs(obj, args)
             obj.x = xtrue;
         end
         
-        % check we have everything
-        allSects = {'evo', 'emi', 'x0 ', 'dat'};
-        if ~all(trackDone)
-            error('No arguments for sections: %s', strjoin(allSects(~trackDone), ','));
-        end
-        
 end
 
 function arg = internalProcessChar(arg, ii, doWarning)
@@ -136,12 +152,13 @@ function arg = internalProcessChar(arg, ii, doWarning)
     if numel(arg < 3); arg = [arg, '   ']; arg = arg(1:3); end
     assert(any(strcmpi(arg(1:3), {'evo', 'emi', 'x0 ', 'dat', 'xtr', 'con'})), ...
         ['string argument #%d (%s) is not one of', ...
-        ' the valid markers {x0, evolution, emission, data}'], ii, orig);
-    argsFullnames = {'x0', 'evolution', 'emission', 'data', 'xtrue', 'control'};
+        ' the valid markers {evolution, emission, x0, data, xtrue, control}'], ii, orig);
+    argsFullnames = {'evolution', 'emission', 'x0', 'data', 'xtrue', 'control'};
     if doWarning && ~any(strcmpi(orig, argsFullnames))
-        chosen = find(arg, {'evo', 'emi', 'x0 ', 'dat', 'xtr'});
-        warning('arg %d: interpreted %s as %s', orig, argsFullnames{chosen});
+        chosen = strcmpi(arg, {'evo', 'emi', 'x0 ', 'dat', 'xtr'});
+        warning('arg %d: interpreted ''%s'' as ''%s''', ii, orig, argsFullnames{chosen});
     end
+    arg = lower(arg);
 end
 
 function obj = internalProcessX0(obj, arg)
@@ -187,7 +204,7 @@ function [obj, tests] = internalProcessEvo(obj, arg)
     elseif isa(arg{1}, 'function_handle')
         obj.par.f = arg{1};
         f = obj.par.f;
-        tests = {@(u) internalTestFun(f, 'f', u, false, obj.d.x, [obj.d.x,1])};
+        tests = {@(u,pars) internalTestFun(f, 'f', u, false, obj.d.x, [obj.d.x,1],pars), 'evo'};
     else
         error('Unknown argument type (%s) in Evolution argument %d', class(arg{1}), 1);
     end
@@ -204,19 +221,13 @@ function [obj, tests] = internalProcessEvo(obj, arg)
             exhaustNum = true;
         elseif isa(arg{ii}, 'function_handle') && ~exhaustFn
             obj.par.Df = arg{ii};
-            if obj.evoNLhasParams
-                f = @(x) obj.par.Df(x, obj.par.evoNLParams);
-            else
-                f = obj.par.Df;
-            end
-            tests{end+1} = @(u) internalTestFun(f, 'Df', u, true, obj.d.x, [obj.d.x, obj.d.x]);  %#ok
+            f          = obj.par.Df;
+            tests{end+1,1} = @(u,pars) internalTestFun(f, 'Df', u, true, obj.d.x, [obj.d.x, obj.d.x], pars);  %#ok
+            tests{end,2}   = 'evo';
             exhaustFn = true;
         elseif isstruct(arg{ii})
             obj.par.evoNLParams = arg{ii};
             obj.evoNLhasParams = true;
-            f = @(x) obj.par.f(x, obj.par.evoNLParams);
-            % replace the previous test with parameterised fn
-            tests{end} = @(u) internalTestFun(f, 'f', u, false, obj.d.x, [obj.d.x,1]);
         else
             error('Don''t know what to do with argument %d in Evolution section', ii);
         end
@@ -239,7 +250,8 @@ function [obj,tests] = internalProcessEmi(obj, arg)
     elseif isa(arg{1}, 'function_handle')
         obj.par.h = arg{1};
         f = obj.par.h;
-        tests{end+1} = @(u) internalTestFun(f, 'h', u, false, obj.d.x, [obj.d.y,1]);
+        tests{end+1,1} = @(u, pars) internalTestFun(f, 'h', u, false, obj.d.x, [obj.d.y,1], pars);
+        tests{end, 2}  = 'emi';
     else
         error('Unknown argument type (%s) in Emission argument %d', class(arg{1}), 1);
     end
@@ -256,18 +268,12 @@ function [obj,tests] = internalProcessEmi(obj, arg)
             exhaustNum = true;
         elseif isa(arg{ii}, 'function_handle') && ~exhaustFn
             obj.par.Dh = arg{ii};
-            if obj.emiNLhasParams
-                f = @(x) obj.par.Dh(x, obj.par.emiNLParams);
-            else
-                f = obj.par.Dh;
-            end
-            tests{end+1} = @(u) internalTestFun(f, 'Dh', u, true, obj.d.x, [obj.d.y, obj.d.x]); %#ok
+            f = obj.par.Dh;
+            tests{end+1,1} = @(u, pars) internalTestFun(f, 'Dh', u, true, obj.d.x, [obj.d.y, obj.d.x], pars); %#ok
+            tests{end,2}   = 'emi';
         elseif isstruct(arg{ii})
             obj.par.emiNLParams = arg{ii};
             obj.emiNLhasParams = true;
-            f = @(x) obj.par.h(x, obj.par.emiNLParams);
-            % replace the previous test with parameterised fn
-            tests{end} = @(u) internalTestFun(f, 'f', u, false, obj.d.x, [obj.d.y,1]);
         else
             error('Don''t know what to do with argument %d in Emission section', ii);
         end
@@ -375,15 +381,31 @@ end
 
 
 
-function internalTestFun(f, nm, u, isDif, inputDim, outputDim)
+function internalTestFun(f, nm, u, isDif, inputDim, outputDim, pars)
+    if isempty(fieldnames(pars)); haspars = false;
+    else, haspars = true; end
+
     try 
+        % switch (hascontrol, haspars)
         if isempty(u)
-            fRng = f(ones(inputDim,1));
+            if ~haspars
+                fRng = f(ones(inputDim,1));
+            else
+                fRng = f(ones(inputDim,1), pars);
+            end
         else
-            fRng = f(ones(inputDim,1), u);
+            if ~haspars
+                fRng = f(ones(inputDim,1), u);
+            else
+                fRng = f(ones(inputDim,1), u, pars);
+            end
         end
     catch ME
-        warning('Tried %s with input of ones(%d, 1). Output error message:\n', nm, inputDim);
+        extramsg = '';
+        if strcmp(ME.identifier, 'MATLAB:minrhs') && isempty(u)
+            extramsg = ['If the function contains control inputs, ensure the option is switched on in constructor call.'];
+        end
+        warning('Tried %s with input of ones(%d, 1). %sOutput error message:\n', nm, inputDim, extramsg);
         rethrow(ME);
     end
     assert(all(size(fRng)==outputDim), ['%s does not map into output space ', ...
@@ -391,10 +413,19 @@ function internalTestFun(f, nm, u, isDif, inputDim, outputDim)
     
     if ~isDif
         try
+            % switch (hascontrol, haspars)
             if isempty(u)
-                fRng = f(ones(inputDim,10));
+                if ~haspars
+                    fRng = f(ones(inputDim,10));
+                else
+                    fRng = f(ones(inputDim,10), pars);
+                end
             else
-                fRng = f(ones(inputDim,10), u);
+                if ~haspars
+                    fRng = f(ones(inputDim,10), u);
+                else
+                    fRng = f(ones(inputDim,10), u, pars);
+                end
             end
         catch ME
             warning('Tried %s with matrix of ones(%d, 10). %s must be columnwise vectorised:\n', nm, inputDim);

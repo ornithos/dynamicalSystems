@@ -1,4 +1,4 @@
-function obj = ssid(obj, L)
+function ssid(obj, L)
     
     % dimension of input vectors
     d       = obj.d.y;
@@ -22,17 +22,6 @@ function obj = ssid(obj, L)
     gamma2    = gamma(d+1:end,:);
     A         = gamma1 \ gamma2;
     
-    % thinking about a more 'robust' method for calculating H. Turns out
-    % this is way less stable due to the high power of A in these calcs.
-%     [uu, ss, vv] = svd(A, 'econ');
-%     ssinv     = 1./diag(ss);
-%     stripGam  = zeros((rows-1)*d, n);
-%     avgH = H;
-%     for jj = 1:rows-1
-%         stripGam((jj-1)*d+1:jj*d, :) = gamma2((jj-1)*d+1:jj*d,:) * vv * diag(ssinv.^jj) * uu';
-%         avgH = H + stripGam((jj-1)*d+1:jj*d, :);
-%     end
-%     H = H./rows;
 
     % Save results in object
     obj.par.H     = H;

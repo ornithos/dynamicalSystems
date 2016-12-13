@@ -27,13 +27,19 @@ classdef ionlds < ds.dynamicalSystem
          assert(~obj.hasControl(2), 'emission model must not include inputs in IONLDS');
       end
       
+      % Make a copy of a handle object.
+      function new = copy(this)
+          % Instantiate new object of the same class.
+          curWarns           = this.opts.warnings;
+          this.opts.warnings = false;
+          new                = ds.ionlds(this);
+          this.opts.warnings = curWarns;
+      end
+      
       % modified superclass methods
       [a,q]              = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
       D                  = getGradient(obj, par, doCheck) % get gradient of parameters
       [llh, niters]      = parameterLearningEM(obj, opts); % do learning
    end
-   
-   methods (Access = protected, Hidden=true)
-       parameterLearningMStep(obj, updateOnly, opts); % internals for EM
-   end
+      
 end

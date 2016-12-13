@@ -14,7 +14,7 @@ function [m, P, C] = assumedDensityTform(pars, m, P, u, type, utpar)
     
     switch type
         case 0
-            if ~isfield(pars,'B')
+            if isempty(u)
                 m = pars.A * m;
             else
                 m = pars.A * m + pars.B * u;
@@ -22,12 +22,21 @@ function [m, P, C] = assumedDensityTform(pars, m, P, u, type, utpar)
             C         = P * pars.A';
             P         = pars.A * P * pars.A' + pars.Q;
         case 1
-            F         = pars.Df(m,u);
-            m         = pars.f(m,u);
+            if isempty(u)
+                F         = pars.Df(m);
+                m         = pars.f(m);
+            else
+                F         = pars.Df(m,u);
+                m         = pars.f(m,u);
+            end
             C         = P * F';
             P         = F * P * F' + pars.Q;
         case 2
-            f         = @(x) pars.f(x,repmat(u, 1, 2*numel(m)+1));
+            if isempty(u)
+                f         = @(x) pars.f(x);
+            else
+                f         = @(x) pars.f(x,repmat(u, 1, 2*numel(m)+1));
+            end
             [m, P, C] = ds.utils.unscentedTransform(f, m, P, ...
                             utpar.alpha, utpar.beta, utpar.kappa);
             P         = P + pars.Q;

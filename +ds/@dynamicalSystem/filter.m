@@ -78,23 +78,32 @@ function filter(obj, fType, bDoLLH, utpar, opts)
     % initialise t-1 = 0 values to prior
     m               = obj.par.x0.mu;
     P               = obj.par.x0.sigma;
-    u_t             = zeros(obj.d.x,1);
+%     u_t             = [];
+%     if any(obj.hasControl); u_t = zeros(obj.d.u,1); end
     
     %% -- Main Loop --
     
     for tt = 1:obj.d.T
-        % Prediction step
-        [m_minus, P_minus, ~] = ds.utils.assumedDensityTform(parPredict, m, P, u_t, fType1, utpar);
-        P_minus               = (P_minus+P_minus')/2;
-        % control signal is (t) for update, but (t-1) for predict
+
+        % control signal is (t) for update and prediction in this version.
         if any(obj.hasControl)
             u_t = obj.u(:,tt);
         else
             u_t = [];
         end
+
+        % Prediction step
+        if obj.hasControl(1), u = u_t;
+        else, u = [];
+        end
+        [m_minus, P_minus, ~] = ds.utils.assumedDensityTform(parPredict, m, P, u, fType1, utpar);
+        P_minus               = (P_minus+P_minus')/2;
         
         % Update step
-        [m_y, S, covxy]   = ds.utils.assumedDensityTform(parUpdate, m_minus, P_minus, u_t, fType2, utpar);
+        if obj.hasControl(2), u = u_t;
+        else, u = [];
+        end
+        [m_y, S, covxy]   = ds.utils.assumedDensityTform(parUpdate, m_minus, P_minus, u, fType2, utpar);
         S                 = (S+S')/2;
         K                 = covxy / S;
         %K                 = utils.math.mmInverseChol(covxy, cholS);
