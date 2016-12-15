@@ -8,9 +8,11 @@ function out = gen_sigmoid(X, eta)
     M     = eta(:,2);
     nu    = eta(:,3);
     gamma = eta(:,4);
+    b     = eta(:,5);
     
     %out   = m + (M-m)./((1 + exp(-gamma.*X)).^(1/nu));
-    denom  = 1 + exp(-bsxfun(@times, gamma, X));
+    gX     = bsxfun(@times, gamma, X);
+    denom  = 1 + exp(-bsxfun(@plus, gX, b));
     denom  = bsxfun(@power, denom, 1./nu);
     
     out    = bsxfun(@rdivide, M - m, denom);

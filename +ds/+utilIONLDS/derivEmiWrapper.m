@@ -8,15 +8,16 @@ function [f, d] = derivEmiWrapper(obj, x)
     assert(isa(obj, 'ds.ionlds'),  'input object is not a valid IONLDS object');
     dy    = obj.d.y;
     dx    = obj.d.x;
-    assert(isnumeric(x) && numel(x) == dy*4 + dy*dx, 'parameter vector is not the correct size');
+    assert(isnumeric(x) && numel(x) == dy*5 + dy*dx, 'parameter vector is not the correct size');
     
     % save current parameters
     eta   = obj.par.emiNLParams.eta;
     C     = obj.par.emiNLParams.C;
+    szEta = size(eta,2);
     
     % update parameters
-    obj.par.emiNLParams.eta   = reshape(x(1:dy*4), dy, 4);
-    obj.par.emiNLParams.C     = reshape(x((dy*4+1):end), dy, dx);
+    obj.par.emiNLParams.eta   = reshape(x(1:dy*szEta), dy, szEta);
+    obj.par.emiNLParams.C     = reshape(x((dy*szEta+1):end), dy, dx);
     
     % get function val and gradient
     if nargout > 1
@@ -30,8 +31,9 @@ function [f, d] = derivEmiWrapper(obj, x)
         d(dy*1 + consec) = D.M;
         d(dy*2 + consec) = D.nu;
         d(dy*3 + consec) = D.gamma;
+        d(dy*4 + consec) = D.b;
     %     d(dy*4+1:end) = 0;
-        d((dy*4 + 1):end)= D.C(:);
+        d((dy*5 + 1):end)= D.C(:);
         
         d                = -d;  % see below (negation)
     else

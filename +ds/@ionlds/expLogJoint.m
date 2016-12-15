@@ -39,7 +39,9 @@ function [a, D] = expLogJoint(obj, utpar)
 
         eta   = obj.par.emiNLParams.eta;
         m     = eta(:,1); M = eta(:,2); nu = eta(:,3); gamma = eta(:,4);
-
+        b     = eta(:,5);
+        C     = [b, obj.par.emiNLParams.C];
+        
         % ____ get derivatives of M2 first _______________________________
         % CXSP are C * sigma points of smoothed distn. The tensor has been
         % unrolled such that CXSP(:,1:2n+1) are the sigma points of (tt=1),
@@ -47,7 +49,8 @@ function [a, D] = expLogJoint(obj, utpar)
         %
         %           (useful quantities #1)
         
-        CXSP         = obj.par.emiNLParams.C * XSP;
+        XSP          = [ones(1, size(XSP,2)); XSP];  % prepend one for bias
+        CXSP         = C * XSP;
         gCX          = bsxfun(@times, gamma, CXSP);
         expmgCX      = exp(-gCX);
         denom        = 1 + expmgCX;
@@ -97,6 +100,9 @@ function [a, D] = expLogJoint(obj, utpar)
         
         D.C         = (WymHx .* dM2.C) * XSP';
         D.C         = (tmpobj.par.R) \ D.C;
+        
+        D.b         = D.C(1,:);
+        D.C         = D.C(2:end,:);
         % probably could have done this for them all tbh 
     end
 end

@@ -11,8 +11,8 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx(obj, alpha, beta, kappa)
     assert(isfield(emiParams, 'C'), 'parameter C not found in emission parameters');
     C         = emiParams.C;
     emiParams = emiParams.eta;
-    assert(isnumeric(emiParams) && (all(size(emiParams) == [1, 4]) || all(size(emiParams) == [d, 4])), ...
-        'emiParams.eta must be a matrix of size (1, 4) or (d.y, 4)');
+    assert(isnumeric(emiParams) && (all(size(emiParams) == [1, 5]) || all(size(emiParams) == [d, 5])), ...
+        'emiParams.eta must be a matrix of size (1, 5) or (d.y, 5)');
     
     if nargin == 1
         alpha = 1;
