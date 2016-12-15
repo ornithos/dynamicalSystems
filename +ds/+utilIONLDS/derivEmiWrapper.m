@@ -8,7 +8,7 @@ function [f, d] = derivEmiWrapper(obj, x)
     assert(isa(obj, 'ds.ionlds'),  'input object is not a valid IONLDS object');
     dy    = obj.d.y;
     dx    = obj.d.x;
-    assert(isnumeric(x) && numel(x) == dy*5 + dy*dx, 'parameter vector is not the correct size');
+    assert(isnumeric(x) && numel(x) == dy*4 + dy*dx, 'parameter vector is not the correct size');
     
     % save current parameters
     eta   = obj.par.emiNLParams.eta;
@@ -29,11 +29,10 @@ function [f, d] = derivEmiWrapper(obj, x)
 
         d(dy*0 + consec) = D.m;
         d(dy*1 + consec) = D.M;
-        d(dy*2 + consec) = D.nu;
-        d(dy*3 + consec) = D.gamma;
-        d(dy*4 + consec) = D.b;
+        d(dy*2 + consec) = D.gamma;
+        d(dy*3 + consec) = D.b;
     %     d(dy*4+1:end) = 0;
-        d((dy*5 + 1):end)= D.C(:);
+        d((dy*4 + 1):end)= D.C(:);
         
         d                = -d;  % see below (negation)
     else

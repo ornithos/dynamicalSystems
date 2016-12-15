@@ -198,8 +198,8 @@ for ii = 1:opts.maxiter
       
     emiOptOut     = fminunc(optimEmi);  % <- magic happens here
     optimEmi.x0   = emiOptOut;
-    obj.par.emiNLParams.eta   = reshape(emiOptOut(1:obj.d.y*5), obj.d.y, 5);
-    obj.par.emiNLParams.C     = reshape(emiOptOut((obj.d.y*5+1):end), obj.d.y, obj.d.x);
+    obj.par.emiNLParams.eta   = reshape(emiOptOut(1:obj.d.y*4), obj.d.y, 4);
+    obj.par.emiNLParams.C     = reshape(emiOptOut((obj.d.y*4+1):end), obj.d.y, obj.d.x);
     
         if multiStep < 4  
             obj.filter('ukf', true, [], fOpts);

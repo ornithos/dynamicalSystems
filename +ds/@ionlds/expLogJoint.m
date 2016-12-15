@@ -38,8 +38,8 @@ function [a, D] = expLogJoint(obj, utpar)
         dM2   = struct;
 
         eta   = obj.par.emiNLParams.eta;
-        m     = eta(:,1); M = eta(:,2); nu = eta(:,3); gamma = eta(:,4);
-        b     = eta(:,5);
+        m     = eta(:,1); M = eta(:,2); gamma = eta(:,4); b = eta(:,4);
+        
         C     = [b, obj.par.emiNLParams.C];
         
         % ____ get derivatives of M2 first _______________________________
@@ -54,22 +54,21 @@ function [a, D] = expLogJoint(obj, utpar)
         gCX          = bsxfun(@times, gamma, CXSP);
         expmgCX      = exp(-gCX);
         denom        = 1 + expmgCX;
-        denomPowNu   = bsxfun(@power, denom, 1./nu);
 
         % *** FOR QUANTITIES (M, m, nu, gamma), the Jacobian is diagonal,
         % *** and we can reduce storage by concatenating diags in matrix.
-        dM2.M        = 1./denomPowNu;
+        dM2.M        = 1./denom;
         dM2.m        = 1 - dM2.M;
         
-        log1PEGCX    = utils.math.log1pexp(-gCX);
-        dM2.nu       = bsxfun(@times, (M-m)./(nu.^2), log1PEGCX./denomPowNu);
+%         log1PEGCX    = utils.math.log1pexp(-gCX);
+%         dM2.nu       = bsxfun(@times, (M-m)./(nu.^2), log1PEGCX./denomPowNu);
         
         % FOR DEBUG>>>>
 %         testgrad     = utils.math.numgrad(@(x) testDeriv(obj, CXSP, x, 1, 3), 0, 1e-8);
         
         %           (useful quantities #2)
         denom2       = (1+exp(gCX)).*denom;
-        tmpGC        = bsxfun(@times, (M-m)./(nu), 1./denom2);
+        tmpGC        = bsxfun(@times, (M-m), 1./denom2);
         
         dM2.gamma    = tmpGC .* CXSP;
         dM2.C        = bsxfun(@times, tmpGC, gamma);   
@@ -83,15 +82,13 @@ function [a, D] = expLogJoint(obj, utpar)
                 
         dM2.m        = sum(WymHx .* dM2.m, 2);
         dM2.M        = sum(WymHx .* dM2.M, 2);
-        dM2.nu       = sum(WymHx .* dM2.nu, 2);
         dM2.gamma    = sum(WymHx .* dM2.gamma, 2);
 
         % ______ derivative = -0.5 * (-2) * R^{-1} * d/dpsi M2 ___________
-        Dtmp         = (tmpobj.par.R)\ [dM2.m, dM2.M, dM2.nu, dM2.gamma];
+        Dtmp         = (tmpobj.par.R)\ [dM2.m, dM2.M, dM2.gamma];
         D.m          = Dtmp(:,1);
         D.M          = Dtmp(:,2);
-        D.nu         = Dtmp(:,3);
-        D.gamma      = Dtmp(:,4);
+        D.gamma      = Dtmp(:,3);
 
         % ================================================================
         % ================================================================
