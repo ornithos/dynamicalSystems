@@ -186,6 +186,16 @@ for ii = 1:opts.maxiter
         fprintf('\n');
         iterBar.currOutputLen = 0;
     end
+    
+      optimOpts = optimoptions(optimOpts, 'MaxFunEvals',30,'GradObj', 'off');
+      if ii <= 3
+          optimOpts = optimoptions(optimOpts, 'Display', 'iter-detailed', 'MaxFunEvals', 200, 'GradObj', 'off');
+      end
+      if ii == opts.maxiter
+          optimOpts = optimoptions(optimOpts, 'MaxFunEvals', 100, 'GradObj', 'off');
+      end
+      optimEmi.options = optimOpts;
+      
     emiOptOut     = fminunc(optimEmi);  % <- magic happens here
     optimEmi.x0   = emiOptOut;
     obj.par.emiNLParams.eta   = reshape(emiOptOut(1:obj.d.y*4), obj.d.y, 4);
@@ -200,6 +210,7 @@ for ii = 1:opts.maxiter
     % ========= Calculate R ============================================
     [~,M2]        = ds.utilIONLDS.utTransform_ymHx(obj);
     obj.par.R     = M2 ./ obj.d.T;
+    if opts.diagR; obj.par.R = diag(diag(obj.par.R)); end
     
     % ========= (:?) INITIAL DISTN =====================================
     % Not entirely comfortable about this

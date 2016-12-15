@@ -139,18 +139,7 @@ classdef dynamicalSystem < handle
       end
       
       function getFittedValues(obj)
-          if ~strcmp(obj.infer.fpHash, obj.parameterHash)
-              if obj.opts.warnings; fprintf('FITVALUES: posterior does not match current parameters'); end
-              if obj.evoLinear && obj.emiLinear
-                  if obj.opts.warnings; fprintf('... fixed!\n'); end
-                  ftype = obj.infer.fType;
-                  stype = obj.infer.sType;
-                  obj.filter(ftype);
-                  obj.smooth(stype);
-              else
-                  error('Unable to get fitted values: posterior does not match parameters. Please run a posterior algm');
-              end
-          end
+          obj.ensureInference('FITVALS', 'smooth');
           fitted = zeros(obj.d.y, obj.d.T);
           for tt = 1:obj.d.T
               u_t = [];
@@ -160,12 +149,45 @@ classdef dynamicalSystem < handle
           obj.yhat = fitted;
       end
       
-      function useSavedParameters(obj, savedName, verbose)
-          if nargin < 3 || isempty(verbose); verbose = obj.opts.verbose; end
-          idx     = obj.stackFind(savedName);
-          svPoint = obj.stack{idx, 1};
-          if verbose; fprintf('Using parameters from save-point ''%s''..\n', obj.stack{idx,2}); end
-          obj.par = svPoint.par;
+      function fitted = getPredictedValues(obj, nlookahead)
+          if nargin < 2; nlookahead = 0; end
+          obj.ensureInference('PREDVALS', 'filter');
+          fitted = zeros(obj.d.y, obj.d.T - nlookahead);
+          for tt = 1:obj.d.T - nlookahead
+              x_t = obj.infer.filter.mu(:,tt);
+              u_t = [];
+              if any(obj.hasControl); u_t = obj.u(:,tt); end
+              for jj = 1:nlookahead
+                  x_t = obj.doTransition(x_t, u_t);
+                  u_t = [];
+                  if any(obj.hasControl); u_t = obj.u(:,tt+jj); end
+              end
+              fitted(:,tt) = obj.doEmission(x_t, u_t);
+          end
+      end
+        
+      %% ----- Save user interfaces --------------------
+      function save(obj, descr)
+          assert(nargin == 2, 'please provide a description');
+          obj.ensureInference('SAVE', 'smooth');
+          
+          insertion         = struct;
+          insertion.par     = obj.par;
+          insertion.infer   = obj.infer;
+          insertion.yhat    = obj.yhat;
+          stackPush(obj, insertion, descr);
+      end
+      
+      function delete(obj, descr)
+          obj.stackDelete(obj.stackFind(descr));
+      end
+      
+      function descr = savedList(obj)
+          sList = obj.getStackDescrList;
+          for ii = 1:numel(sList)
+              sList{ii} = [num2str(ii), '. ', sList{ii}];
+          end
+          descr = strjoin(sList, '\n');
       end
       
       function svPoint = getSaved(obj, savedName)
@@ -173,7 +195,132 @@ classdef dynamicalSystem < handle
           svPoint = obj.stack{idx, 1};
       end
       
-      % ---- Save stack handlers -----------------------
+      function useSavedParameters(obj, savedName, verbose)
+          if nargin < 3 || isempty(verbose); verbose = obj.opts.verbose; end
+          idx     = obj.stackFind(savedName);
+          svPoint = obj.stack{idx, 1};
+          if verbose; fprintf('Using parameters from save-point ''%s''..\n', obj.stack{idx,2}); end
+          obj.par   = svPoint.par;
+          obj.infer = svPoint.infer;
+          obj.yhat  = svPoint.yhat;
+      end
+      
+      function yhat = getFittedFromSaved(obj, savedName)
+          tmpsvName  = char(floor(94*rand(1, 20)) + 32);   % 1e39 possibilities
+          obj.save(tmpsvName);
+          obj.useSavedParameters(savedName, false);
+          obj.getFittedValues;
+          if isempty(obj.yhat); obj.getFittedValues; end
+          yhat    = obj.yhat;
+          
+          obj.useSavedParameters(tmpsvName, false);
+          obj.stackDelete(obj.stackFind(tmpsvName));  % belt-and-braces
+      end
+      
+      %% -----  Other utils ------------------------
+      % --- (NL) functions ---------------
+      function [fe, Dfe, he, Dhe] = functionInterfaces(obj)
+        % non-linear wrappers for common interface to fns
+        if obj.evoNLhasParams
+            if obj.hasControl(1)
+                fe = @(x,u) obj.par.f(x, u, obj.par.evoNLParams);
+                Dfe = @(x,u) obj.par.Df(x, u, obj.par.evoNLParams);
+            else
+                fe = @(x,u) obj.par.f(x, obj.par.evoNLParams);
+                Dfe = @(x,u) obj.par.Df(x, obj.par.evoNLParams);
+            end
+        else
+            if obj.hasControl(1)
+                fe = @(x,u) obj.par.f(x,u);
+                Dfe = @(x,u) obj.par.Df(x,u);
+            else
+                fe = @(x,u) obj.par.f(x);
+                Dfe = @(x,u) obj.par.Df(x);
+            end
+        end
+        if obj.emiNLhasParams
+            if obj.hasControl(2)
+                he = @(x,u) obj.par.h(x, u, obj.par.emiNLParams);
+                Dhe = @(x,u) obj.par.Dh(x, u, obj.par.emiNLParams);
+            else
+                he = @(x) obj.par.h(x, obj.par.emiNLParams);
+                Dhe = @(x) obj.par.Dh(x, obj.par.emiNLParams);
+            end
+        else
+            if obj.hasControl(2)
+                he = @(x,u) obj.par.h(x,u);
+                Dhe = @(x,u) obj.par.Dh(x,u);
+            else
+                he = @(x,u) obj.par.h(x);
+                Dhe = @(x,u) obj.par.Dh(x);
+            end
+        end
+      end
+      
+      function b   = parametersChanged(obj)
+            b = ~strcmp(obj.infer.fpHash, obj.parameterHash);
+      end
+      
+      function ensureInference(obj, caller, type)
+          % ensure inference exists, and if linear, perform inference if not.
+          assert(ischar(caller), 'caller must be of type char');
+          if nargin < 3; type = 'smooth'; end
+          assert(ischar(type) && any(ismember(type, {'filter', 'smooth'})), 'type must be ''filter'' or ''smooth''');
+          if ~strcmp(obj.infer.fpHash, obj.parameterHash)
+              if obj.opts.warnings; fprintf('%s: posterior does not match current parameters', upper(caller)); end
+              if obj.evoLinear && obj.emiLinear
+                  if obj.opts.warnings; fprintf('... fixed!\n'); end
+                  ftype = obj.infer.fType;
+                  stype = obj.infer.sType;
+                  obj.filter(ftype);
+                  if strcmp(type, 'smooth')
+                      obj.smooth(stype);
+                  end
+              else
+                  error('Unable to get fitted values: posterior does not match parameters. Please run a posterior algm');
+              end
+          end
+      end
+          
+      function llh = logLikelihood(obj, fType, utpar, opts)
+          if nargin < 4 || isempty(opts); opts = struct; end
+          if nargin < 3 || isempty(utpar); utpar = struct; end
+          if nargin < 2 || isempty(fType); fType = []; end
+          tmpobj = obj.copy;
+          tmpobj.filter(fType, true, utpar, opts);
+          llh    = tmpobj.infer.llh;
+      end
+      
+      % --- prototypes -------------------
+      % inference / learning 
+      [a,q]         = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
+%       obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
+%       obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
+%       obj = filterUnscented(obj, bDoLLH, bDoValidation, utpar); % Unscented (UKF) Filter
+      filter(obj, fType, bDoLLH, utpar, opts) % one of dynamics linear, other piped to NL.
+      D             = getGradient(obj, par, doCheck) % get gradient of parameters
+%       obj = smoothLinear(obj, bDoValidation); % RTS Smoother
+%        obj = smoothExtended(obj, bDoValidation); % Extended (EKF) RTS Smoother
+%       obj = smoothUnscented(obj, bDoValidation, utpar); % Unscented (UKF) RTS Smoother
+      smooth(obj, fType, utpar, opts) % one of dynamics linear, other piped to NL.
+      ssid(obj, L);  % Subspace ID
+      [llh, niters] = parameterLearningEM(obj, opts);
+      lhHist        = parameterLearnOnline(obj, fType, opts, utpar)
+      
+      s             = suffStats(obj, opts);  % Sufficient statistics required for learning
+      % graphical
+      plotStep2D(obj, posteriorType)
+   end
+   
+   methods (Access = protected, Hidden=true)
+       parameterLearningMStep(obj, updateOnly, opts); % internals for EM
+       ok  = validationInference(obj, doError); % Input validation
+       out = parameterHash(obj);
+   end
+   
+   methods (Access = private)
+
+             %% ---- Save stack handlers -----------------------
       function stackPush(obj, insertion, descr)
           maxIdx = size(obj.stack, 1);
           if obj.stackptr >= maxIdx
@@ -236,120 +383,9 @@ classdef dynamicalSystem < handle
         else
             error('unknown search type for stack. Expected scalar-numeric, character or empty');
         end
-    end
+      end
       % ------------------------------------------------
-        
-      % ----- save / stack aliases ------------------------
-      function save(obj, descr)
-          assert(nargin == 2, 'please provide a description');
-          if ~strcmp(obj.infer.fpHash, obj.parameterHash)
-              if obj.opts.warnings; fprintf('SAVE: posterior does not match current parameters'); end
-              if obj.evoLinear && obj.emiLinear
-                  if obj.opts.warnings; fprintf('... fixed!\n'); end
-                  ftype = obj.infer.fType;
-                  stype = obj.infer.sType;
-                  obj.filter(ftype);
-                  obj.smooth(stype);
-              else
-                  error('Unable to save: posterior does not match parameters. Please run a posterior algm');
-              end
-          end
-          
-          insertion         = struct;
-          insertion.par     = obj.par;
-          insertion.infer   = obj.infer;
-          stackPush(obj, insertion, descr);
-      end
       
-      function descr = savedList(obj)
-          sList = obj.getStackDescrList;
-          for ii = 1:numel(sList)
-              sList{ii} = [num2str(ii), '. ', sList{ii}];
-          end
-          descr = strjoin(sList, '\n');
-      end
-      
-      % --- (NL) functions ---------------
-      function [fe, Dfe, he, Dhe] = functionInterfaces(obj)
-        % non-linear wrappers for common interface to fns
-        if obj.evoNLhasParams
-            if obj.hasControl(1)
-                fe = @(x,u) obj.par.f(x, u, obj.par.evoNLParams);
-                Dfe = @(x,u) obj.par.Df(x, u, obj.par.evoNLParams);
-            else
-                fe = @(x,u) obj.par.f(x, obj.par.evoNLParams);
-                Dfe = @(x,u) obj.par.Df(x, obj.par.evoNLParams);
-            end
-        else
-            if obj.hasControl(1)
-                fe = @(x,u) obj.par.f(x,u);
-                Dfe = @(x,u) obj.par.Df(x,u);
-            else
-                fe = @(x,u) obj.par.f(x);
-                Dfe = @(x,u) obj.par.Df(x);
-            end
-        end
-        if obj.emiNLhasParams
-            if obj.hasControl(2)
-                he = @(x,u) obj.par.h(x, u, obj.par.emiNLParams);
-                Dhe = @(x,u) obj.par.Dh(x, u, obj.par.emiNLParams);
-            else
-                he = @(x) obj.par.h(x, obj.par.emiNLParams);
-                Dhe = @(x) obj.par.Dh(x, obj.par.emiNLParams);
-            end
-        else
-            if obj.hasControl(2)
-                he = @(x,u) obj.par.h(x,u);
-                Dhe = @(x,u) obj.par.Dh(x,u);
-            else
-                he = @(x,u) obj.par.h(x);
-                Dhe = @(x,u) obj.par.Dh(x);
-            end
-        end
-      end
-      
-      function b   = parametersChanged(obj)
-            b = ~strcmp(obj.infer.fpHash, obj.parameterHash);
-      end
-      
-      function llh = logLikelihood(obj, fType, utpar, opts)
-          if nargin < 4 || isempty(opts); opts = struct; end
-          if nargin < 3 || isempty(utpar); utpar = struct; end
-          if nargin < 2 || isempty(fType); fType = []; end
-          tmpobj = obj.copy;
-          tmpobj.filter(fType, true, utpar, opts);
-          llh    = tmpobj.infer.llh;
-      end
-      
-      % --- prototypes -------------------
-      % inference / learning 
-      [a,q]         = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
-%       obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
-%       obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
-%       obj = filterUnscented(obj, bDoLLH, bDoValidation, utpar); % Unscented (UKF) Filter
-      filter(obj, fType, bDoLLH, utpar, opts) % one of dynamics linear, other piped to NL.
-      D             = getGradient(obj, par, doCheck) % get gradient of parameters
-%       obj = smoothLinear(obj, bDoValidation); % RTS Smoother
-%        obj = smoothExtended(obj, bDoValidation); % Extended (EKF) RTS Smoother
-%       obj = smoothUnscented(obj, bDoValidation, utpar); % Unscented (UKF) RTS Smoother
-      smooth(obj, fType, utpar, opts) % one of dynamics linear, other piped to NL.
-      ssid(obj, L);  % Subspace ID
-      [llh, niters] = parameterLearningEM(obj, opts);
-      lhHist        = parameterLearnOnline(obj, fType, opts, utpar)
-      
-      s             = suffStats(obj, opts);  % Sufficient statistics required for learning
-      % graphical
-      plotStep2D(obj, posteriorType)
-   end
-   
-   methods (Access = protected, Hidden=true)
-       parameterLearningMStep(obj, updateOnly, opts); % internals for EM
-       ok  = validationInference(obj, doError); % Input validation
-       out = parameterHash(obj);
-   end
-   
-   methods (Access = private)
-
        % ---- Dynamics wrappers --------------------------
         function out = doTransition(obj, input, u)
            
