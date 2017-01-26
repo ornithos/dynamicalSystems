@@ -5,12 +5,14 @@ out(:,1) = -1;
 
 plotdims       = utils.plot.subplotdims(3);
 figure('Position', [250, 250, 1200, 750])
+
 ib = utils.base.objIterationBar;
 ib.newIterationBar('-- starting patient', 40, true);
 ib.currOutputLen = 0;
 
 for ii = 1:40
 ib.print(ii);
+
 R      = 0.2;
 ss     = 3;
 os     = size(Ys{ii},1);
@@ -90,4 +92,6 @@ out(ii,11:16) = ds.utilIONLDS.getTransitionStatistics(dsINL.par.A);
 pause
 end
 ib.finish;
+
+
 modelframe = [nanmean(out(:,[2,5,8]),2), nanmean(out(:,[2,5,8]+1),2), nanmean(out(:,[2,5,8]+2),2), ones(40,1), out(:,11:16)];
