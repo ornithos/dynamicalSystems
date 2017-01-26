@@ -91,7 +91,7 @@ function smooth(obj, sType, utpar, opts)
     for tt = (obj.d.T-1):-1:1
         % Prediction step
         if hasControl
-            u_t = obj.u(:,tt);
+            u_t = obj.u(:,tt+1);   %tt=T-1 => u_{T} because [N(Ax_t-1 + Bu_t, Q)]
         else
             u_t = [];
         end
@@ -113,7 +113,7 @@ function smooth(obj, sType, utpar, opts)
     
     % x0 (purely to get G_0)
     if hasControl
-        u_t             = zeros(obj.d.u,1);
+        u_t             = obj.u(:,1);
     end
     fMu_tt          = obj.par.x0.mu;
     fP_tt           = obj.par.x0.sigma;

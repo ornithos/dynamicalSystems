@@ -4,7 +4,9 @@ if nargin < 2 || isempty(opts); opts = struct; end
 optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL', 5, ...
                         'verbose', true, 'dbg', false, 'validation', false, ...
                         'multistep', 4, 'diagQ', false, 'diagR', false, ...
-                        'sampleStability', 1, 'stableVerbose', false);
+                        'sampleStability', 1, 'stableVerbose', false, ...
+                        'annealingSchedule', Inf, 'annealingIter', 10, ...
+                        'annealingMin', 1e-6);
 optsDefault     = utils.base.parse_argumentlist(obj.opts, optsDefault, false);      % bring in global opts
 opts            = utils.base.parse_argumentlist(opts, optsDefault, false);          % add user specified opts.
 
@@ -18,6 +20,19 @@ if opts.ssid
         fprintf('(%s) Initialising using subspace identification...\n', datestr(now, 'HH:MM:SS'));
     end
     obj.ssid(opts.ssidL);
+    ssidrescale = max(abs(eig(obj.par.A)));
+    ssidrescale = max(ssidrescale, 0);    % ensure stable trans matrix (hack!)
+    obj.par.A   = obj.par.A ./ ssidrescale;
+    obj.par.H   = obj.par.H .* ssidrescale;
+    
+    obj.filter;
+    obj.smooth;
+%     % do filter and smooth first anyway, since need suff stats for constrain gen
+%     if max(abs(eig(obj.par.A))) > 1 + sing_val_eps
+%         obj.par.A    = stabiliseA_constraintGeneration(obj, obj.par.A, 1);
+%         obj.filter;
+%         obj.smooth;
+%     end
 else
     var_y   = var(obj.y);
     if isempty(obj.par.A)
@@ -38,6 +53,19 @@ if opts.validation
     obj.validationInference;  % ensure able to do inference
 end
 
+% ________ Determine annealing schedule __________________________________
+% Perform Deterministic Annealing (cf. Ueda, Nakano - Deterministic
+% Annealing Variant of the EM Algorithm, NIPS 1995)
+% beta denotes the inverse temperature: 0 = hot, 1 = cooled.
+assert(opts.annealingSchedule > 0, 'annealing schedule must increase by strictly positive amount');
+assert(opts.annealingMin > 0 && opts.annealingMin <= 1, 'annealing minimum beta must be in (0,1]');
+da.invbetas     = (linspace(1, 0, max(1,1./opts.annealingSchedule)));
+da.invbetas     = exp(-da.invbetas.*log(opts.annealingMin));
+da.invbetas     = round(da.invbetas,5);
+da.n            = numel(da.invbetas);
+da.pointer      = 1;
+da.cur          = da.invbetas(1);  % may not be min if annealingSchedule is infinite.
+da.curIter      = 0;
 
 % ________ Get names of parameters which have been 'fixed' _______________
 % get options for Filtering and for M-step
@@ -62,6 +90,9 @@ if ~obj.emiLinear
     mstepOpts.fixR = true;
 end
 
+% preallocate deterministic annealing amount
+mstepOpts.anneal = 1;   % 1 corresponds to no annealing.
+
 % _______ initialise _____________________________________________________
 llh        = [-Inf; zeros(opts.maxiter,1)];
 converged  = false;
@@ -71,6 +102,12 @@ iterBar.newIterationBar('EM Iteration: ', opts.maxiter, true, '--- ', 'LLH chang
 
 % multistep: do all 4 (default) maximisations together initially.
 multiStep  = opts.multistep;
+if ~(~opts.verbose && ~opts.stableVerbose)
+    % if no verbose, switch off iteration count (.) in constraint gen script.
+    % else stableVerbose = 1 is the dots, stableVerbose = 2 is the full thing
+    opts.stableVerbose = opts.stableVerbose + 1; 
+end
+
 % Initialise dbg struct in case we need it..
 dbgLLH = struct('A',[0,0],'Q',[0,0],'H',[0,0],'R',[0,-Inf]);
 
@@ -90,7 +127,9 @@ for ii = 1:opts.maxiter
     % --- if prev step constrained, we may have seen a drop in LLH.
     %     However, we do not expect this in the case where sampleStability
     %     is 1 since should still be monotonic if every iter stable.
-    if delta < -1e-8 && ~(prevStepWasConstrained && ~(sampleStability == 1))
+    % --- Deterministic annealing artificially reflates the variance so no
+    %     guarantees if beta < 1.
+    if delta < -1e-8 && da.cur == 1 && ~(prevStepWasConstrained && ~(opts.sampleStability == 1))
         iterBar.updateText([iterBar.text, '*']);
         if multiStep == 1
             % basically things have gone really wrong by here..
@@ -109,17 +148,27 @@ for ii = 1:opts.maxiter
     
     % convergence
     if abs(delta) < opts.epsilon
-        iterBar.finish;
-        converged = true;
-        if opts.verbose
-            fprintf('(%s) EM Converged in %d iterations (%.3e < %.3e) \n', datestr(now), ii, delta, opts.epsilon);
+        % annealing has finished?
+        if da.cur == 1
+            if opts.verbose; iterBar.finish; end
+            converged = true;
+            if opts.verbose
+                fprintf('(%s) EM Converged in %d iterations (%.3e < %.3e) \n', datestr(now), ii, delta, opts.epsilon);
+            end
+            break
+        else
+            % update annealing if not
+            da.pointer = min(da.pointer + 1, da.n);
+            da.cur     = da.invbetas(da.pointer);
+            da.curIter = 1;
+            iterBar.updateText([iterBar.text, '>']);
         end
-        break
     end
     % ====================================================================
     %
     %% M-Steps (interleaved with E-steps if required, since ow. ECM not EM!)
     % ----------------------------
+    mstepOpts.anneal = da.cur;
     
     % ____ Canonical parameters ___________________________________________
     prevA         = obj.par.A;
@@ -131,18 +180,21 @@ for ii = 1:opts.maxiter
     if mod(ii, opts.sampleStability) == 0
         if max(abs(eig(obj.par.A))) > 1 + sing_val_eps
             cgTic        = tic;
-            if opts.verbose
+            if opts.stableVerbose > 1
                 iterBar.clearConsole;
                 fprintf('Stabilising A with constraint generation... ');
             end
             badA         = obj.par.A;
             obj.par.A    = prevA;   % reset to last good A
             obj.par.A    = stabiliseA_constraintGeneration(obj, prevA, opts.stableVerbose); % see mini function below ????
+            if max(abs(eig(obj.par.A))) > 1
+                keyboard
+            end
 %             newLLH       = obj.logLikelihood;
 %             if newLLH < prevLLH
 %                 keyboard
 %             end
-            if opts.verbose; fprintf('Done! (%.2f)\n', toc(cgTic)); end
+            if opts.stableVerbose; fprintf('Done! (%.2f)\n', toc(cgTic)); end
             prevStepWasConstrained = true;
         end
     end
@@ -180,6 +232,17 @@ for ii = 1:opts.maxiter
     if opts.verbose && ~opts.dbg
         iterBar.print(ii, delta);
     end
+
+    % update annealing
+    if da.curIter < opts.annealingIter
+        da.curIter = da.curIter + 1;
+    else
+        da.pointer = min(da.pointer + 1, da.n);
+        da.cur     = da.invbetas(da.pointer);
+        da.curIter = 1;
+    end
+    
+    
 end
 
 if ~converged && opts.verbose

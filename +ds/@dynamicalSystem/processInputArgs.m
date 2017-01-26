@@ -135,7 +135,7 @@ function processInputArgs(obj, args)
         
         % data generation
         if bGen
-            obj   = obj.generateData;
+            obj.generateData;
         end
         
         % do X0
@@ -244,9 +244,14 @@ function [obj,tests] = internalProcessEmi(obj, arg)
     tests         = {};
     %{H || h || []}, {Dh, R},
     if isnumeric(arg{1})
-        assert(all(size(arg{1})==[obj.d.y, obj.d.x]), 'matrix H is not conformable to dim(x), dim(y)');
-        obj.par.H = arg{1};
-        obj.emiLinear = true;
+        if isempty(arg{1})
+            % unknown emission matrix
+            obj.emiLinear = true;
+        else
+            assert(all(size(arg{1})==[obj.d.y, obj.d.x]), 'matrix H is not conformable to dim(x), dim(y)');
+            obj.par.H = arg{1};
+            obj.emiLinear = true;
+        end  
     elseif isa(arg{1}, 'function_handle')
         obj.par.h = arg{1};
         f = obj.par.h;

@@ -88,6 +88,10 @@ classdef dynamicalSystem < handle
          % CONSTRUCTOR
          obj.processInputArgs(varargin);
          
+         if numel(varargin) == 1 && isa(varargin{1}, 'ds.dynamicalSystem')
+             return
+         end
+         
          % pre populate filter/smoother for input data
          if obj.evoLinear && obj.emiLinear
              if obj.validationInference(false)
@@ -175,6 +179,7 @@ classdef dynamicalSystem < handle
           insertion.par     = obj.par;
           insertion.infer   = obj.infer;
           insertion.yhat    = obj.yhat;
+          insertion.hasControl = obj.hasControl;
           stackPush(obj, insertion, descr);
       end
       
@@ -208,7 +213,16 @@ classdef dynamicalSystem < handle
       function yhat = getFittedFromSaved(obj, savedName)
           tmpsvName  = char(floor(94*rand(1, 20)) + 32);   % 1e39 possibilities
           obj.save(tmpsvName);
-          obj.useSavedParameters(savedName, false);
+          try
+              obj.useSavedParameters(savedName, false);
+          catch ME
+              obj.stackDelete(obj.stackFind(tmpsvName)); % <- avoid temp saves from failures.
+              if strcmp(ME.identifier, 'ds:saveNameNotOnStack')
+                  error('save name %s not found. Unable to retrieve fitted values.', savedName);
+              else
+                  rethrow(ME);
+              end
+          end
           obj.getFittedValues;
           if isempty(obj.yhat); obj.getFittedValues; end
           yhat    = obj.yhat;
@@ -293,7 +307,7 @@ classdef dynamicalSystem < handle
       
       % --- prototypes -------------------
       % inference / learning 
-      [a,q]         = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
+      [a,q]         = expLogJoint(obj, varargin); % Q(theta, theta_n) / free energy less entropy
 %       obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
 %       obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
 %       obj = filterUnscented(obj, bDoLLH, bDoValidation, utpar); % Unscented (UKF) Filter
@@ -378,7 +392,9 @@ classdef dynamicalSystem < handle
         elseif ischar(test)
             descr    = obj.getStackDescrList;
             idx      = find(strcmpi(test, descr));
-            assert(~isempty(idx), 'Cannot find save-point ''%s'' on save stack', test);
+            if isempty(idx)
+                error('ds:saveNameNotOnStack','Cannot find save-point ''%s'' on save stack', test);
+            end
             assert(isscalar(idx), 'Multiple matches on save stack. Should be impossible.. eep');
         else
             error('unknown search type for stack. Expected scalar-numeric, character or empty');

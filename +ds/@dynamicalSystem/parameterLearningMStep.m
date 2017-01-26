@@ -58,11 +58,11 @@ function parameterLearningMStep(obj, updateOnly, opts)
         return
     end
     
-    optsDefault = struct('verbose', true, 'diagQ', false, 'diagR', false);
+    optsDefault = struct('verbose', true, 'diagQ', false, 'diagR', false, 'anneal', 1);
     opts        = utils.base.parse_argumentlist(opts, optsDefault, true);
     
     % get all sufficient statistics
-    s   = obj.suffStats(struct('bIgnoreHash', true));
+    s   = obj.suffStats(struct('bIgnoreHash', true, 'anneal', opts.anneal));
 
     eps = 1e-8./obj.d.T;   % 'kind-of' prior to avoid instability in covariances.
     
@@ -114,7 +114,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
         if opts.diagQ
             obj.par.Q = diag(diag(obj.par.Q));
         end
-
+        
         % debug message
         if opts.verbose; prevLLH = dbgConsole(prevLLH, obj, {'Q'}, fOpts); end
     end
@@ -160,7 +160,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
         if opts.diagR
             obj.par.R = diag(diag(obj.par.R));
         end
-
+        
         % debug message
         if opts.verbose; prevLLH = dbgConsole(prevLLH, obj, {'R'}, fOpts); end
     end

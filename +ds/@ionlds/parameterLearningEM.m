@@ -65,6 +65,7 @@ switch opts.optimType
     otherwise
         error('unknown optimType specified. Choose from ''auto'', ''analytic'', ''analytic-debug''');
 end
+
 optimEmi.options   = optimOpts;
 optimEmi.objective = @(x) ds.utilIONLDS.derivEmiWrapper(obj, x);
 optimEmi.solver    = 'fminunc';
@@ -117,7 +118,7 @@ for ii = 1:opts.maxiter
             iterBar.clearConsole;
             fprintf('min eigv Q = %.3e', min(eig(obj.par.Q)));
             fprintf(', min eigv R = %.3e\n', min(eig(obj.par.R)));
-            keyboard
+%             keyboard
         elseif opts.sampleStability > 1
             % only periodically sampling stability of A leads to jumps..
             opts.sampleStability = 1;
@@ -194,6 +195,7 @@ for ii = 1:opts.maxiter
       if ii == opts.maxiter
           optimOpts = optimoptions(optimOpts, 'MaxFunEvals', 100, 'GradObj', 'off');
       end
+      optimOpts = optimoptions(optimOpts, 'Display', 'off');
       optimEmi.options = optimOpts;
       
     emiOptOut     = fminunc(optimEmi);  % <- magic happens here

@@ -27,4 +27,7 @@ function ssid(obj, L)
     obj.par.H     = H;
     obj.par.A     = A;
     
+    % for now...
+    obj.par.Q     = eye(n);
+    obj.par.R     = eye(d);
 end

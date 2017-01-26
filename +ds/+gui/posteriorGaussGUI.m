@@ -35,9 +35,8 @@ function [out, descr] = getSavePoint(dso, sp)
         end
         [out, descr]     = dso.stackTop;
     else
-        sp       = dso.stackFind(sp);
-        out      = dso.stack{sp, 1};
-        descr    = dso.stack{sp, 2};
+        out      = dso.getSaved(sp);
+        descr    = sp;
     end
 end
 

@@ -114,7 +114,7 @@ M_init = M_init';
 %M = pinv(S1')*S2';
 M = M_init;
 lsscore = norm(S1'*M - S2','fro')^2;
-if verbose; fprintf('frob score = %.4f\n',lsscore); end
+if verbose > 1; fprintf('frob score = %.4f\n',lsscore); end
 
 if false
     [tmp_evals,max_e,min_e] = get_eigenthings(M);
@@ -128,11 +128,11 @@ if false
     % dip below 1
     % watch for stability 
     if max_e < 1 && min_e > -1
-        if verbose; fprintf('done early! full eigenvals:\n'); end
+        if verbose > 1; fprintf('done early! full eigenvals:\n'); end
         M = M';
         return;
     else
-        if verbose
+        if verbose > 1
             fprintf('initial top eigenval = %.4f\n',max_e);
             fprintf('initial smallest eigenval = %.4f\n',min_e);
         end
@@ -200,14 +200,16 @@ for i = 1:1000
     % watch for stability 
         
     if( max_e < 1 & min_e > -1 )    % then we're done
-        if verbose; fprintf('found M, exiting ...\n'); end
+        if verbose > 1; fprintf('found M, exiting ...\n'); end
         break;
     else
-        fprintf('.');
-        if mod(i,dotprint) == 0
-            if verbose; 
-                fprintf('\n');
-                fprintf('eps: %.3f, diffscore: %.4f, top eval: %.7f, small eval: %.7f\n',eps,diffscore,max_e,min_e);
+        if verbose >= 1
+            fprintf('.');
+            if verbose > 1
+                if mod(i,dotprint) == 0
+                    fprintf('\n');
+                    fprintf('eps: %.3f, diffscore: %.4f, top eval: %.7f, small eval: %.7f\n',eps,diffscore,max_e,min_e);
+                end
             end
         end
     end
@@ -220,9 +222,9 @@ for i = 1:1000
     
     % Add a constraint based on largest singular value
     %        fprintf('top eigval too large, adding constraint ... \n');
-    if verbose
+    if verbose >=1
         fprintf('.');
-        if mod(i,dotprint) == 0
+        if verbose > 1 && mod(i,dotprint) == 0
             fprintf('\n');
             fprintf('eps: %.3f, diffscore: %.4f, top sval: %.7f\n',eps,diffscore,s);
             fprintf('time so far: %.3f\n', etime(clock,begintime));
@@ -237,7 +239,7 @@ end
 maxeig= max(abs(eig(M)));
 maxsval = svds(M,1);
 
-if verbose
+if verbose > 1
     fprintf('top eigval after constrained QP: %.7f\n',maxeig);
     fprintf('top sval after constrained QP: %.7f\n',maxsval);
 end
@@ -255,7 +257,7 @@ if true %~simulate_LB1
     Morig = Mprev;
     if true %simulate_LB1 == 0
         while hi-lo > tol
-            fprintf(',');
+            if verbose >= 1; fprintf(','); end
             alpha = lo + (hi-lo)/2;
             Mbest = (1-alpha)*M + alpha*Morig;
             maxeig = max(abs(eig(Mbest)));
@@ -272,7 +274,7 @@ if true %~simulate_LB1
         maxeig= max(abs(eig(M)));
         maxsval = svds(M,1);
 
-        if verbose
+        if verbose > 1
             fprintf('top eigval after binary search: %.7f\n',maxeig);
             fprintf('top sval after binary search: %.7f\n',maxsval);
         end
@@ -284,7 +286,7 @@ end
 % QP - however it will not be by much)
 
 % returning dynamics matrix in proper orientation
-if M_init(:)'*P*M_init(:) -2*M_init(:)'*q < Mbest(:)'*P*Mbest(:) -2*Mbest(:)'*q
+if M_init(:)'*P*M_init(:) -2*M_init(:)'*q < (Mbest(:)'*P*Mbest(:) -2*Mbest(:)'*q)*1.0001
     M = M_init';
 else
     M = M';

@@ -1,6 +1,6 @@
 % initial "circular motion" trial
 tmp = ds.dynamicalSystem(2, 2, 'x0', 1e-5, 'evolution', [cos(0.03) -sin(0.03); sin(0.03) cos(0.03)], eye(2), ...
-        'emission', 0.5*eye(2), 0.2*eye(2), 'data', 50);
+        'emission', 0.5*eye(2), 0.2*eye(2), 'data', 50, struct('verbose', false));
 tmp.smooth;
 
 %%
@@ -17,12 +17,15 @@ Q(4,4)              = 0.2;
 % x0                  = struct('mu', zeros(4,1), 'sigma', eye(4)*1e2);
 x0                  = [];
 dsNewton  = ds.dynamicalSystem(4, 2, 'x0', 1e-5, 'evolution', transition, Q, 'emission', emission, 5*eye(2), 'data', 100);
+dsNewton.filter([],true);
 dsNewton.smooth;
 dsNewton.save('original-params');
 
 %%
 opts             = struct('maxiter', 1000, 'epsilon', 1e-3, 'sampleStability', 10, 'multistep', 4);
 llh = dsNewton.parameterLearningEM(opts);
+dsNewton.filter([],true);
+dsNewton.smooth;
 dsNewton.save('learned-all-EM1');
 
 % dsNewton.useSavedParameters('original-params');
@@ -34,7 +37,7 @@ dsNewton.save('learned-all-EM1');
 % dsNewton.save('learned-all-EM3');
 %%
 
-ds.gui.posteriorGaussGUI(dsNewton, 'original-params', 'learned-all-EM');
+ds.gui.posteriorGaussGUI(dsNewton, 'original-params', 'learned-all-EM1');
 
 %%
 % Control inputs test

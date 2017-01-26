@@ -7,7 +7,7 @@ if nargin < 2 || isempty(opts)
     opts = struct;
 end
 
-optsDefault  = struct('verbose', true, 'bIgnoreHash', false);
+optsDefault  = struct('verbose', true, 'bIgnoreHash', false, 'anneal', 1);
 opts         = utils.base.parse_argumentlist(opts, optsDefault);
     
 % Check for existence of Smoothed estimates
@@ -27,6 +27,12 @@ sigma = vertcat(obj.infer.smooth.x0.sigma, obj.infer.smooth.sigma);
 G     = vertcat(obj.infer.smooth.x0.G, obj.infer.smooth.G);
 y     = obj.y;
 T     = obj.d.T;
+
+% deterministic annealing of posterior:
+if opts.anneal < 1
+    cellfun(@(x) x.*opts.anneal, sigma, 'UniformOutput',0);
+    cellfun(@(x) x.*opts.anneal, G, 'UniformOutput',0);
+end
 
 if any(obj.hasControl)
     U = [zeros(obj.d.u, 1), obj.u];
