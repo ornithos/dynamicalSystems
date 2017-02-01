@@ -93,7 +93,7 @@ iterBar.newIterationBar('EM Iteration: ', opts.maxiter, true, '--- ', 'LLH chang
 % multistep: do all 4 (default) maximisations together initially.
 multiStep  = opts.multistep;
 % Initialise dbg struct in case we need it..
-dbgLLH = struct('A',[0,0],'Q',[0,0],'H',[0,0],'R',[0,-Inf]);
+dbgLLH = struct('A',[0,0],'Q',[0,0],'H',[0,0],'R',[0,0],'x0',[0,-Inf]);
 
 %% MAIN EM LOOP
 for ii = 1:opts.maxiter
@@ -102,7 +102,7 @@ for ii = 1:opts.maxiter
     obj.smooth('ukf', [], fOpts);
     
     % llh calc
-    dbgLLH.R  = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh];
+    dbgLLH.x0  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
     llh(ii+1) = obj.infer.llh;
     delta     = llh(ii+1) - llh(ii);
     
@@ -172,7 +172,7 @@ for ii = 1:opts.maxiter
         if multiStep == 1       
             obj.filter('ukf', true, [], fOpts);
             obj.smooth('ukf', [], fOpts);
-            dbgLLH.A  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
+            dbgLLH.A  = [obj.infer.llh - dbgLLH.x0(2), obj.infer.llh];
         end
     
     obj.parameterLearningMStep({'Q'}, mstepOpts);
@@ -188,7 +188,7 @@ for ii = 1:opts.maxiter
         iterBar.currOutputLen = 0;
     end
     
-      optimOpts = optimoptions(optimOpts, 'MaxFunEvals',30,'GradObj', 'off');
+      optimOpts = optimoptions(optimOpts, 'MaxFunEvals',100,'GradObj', 'off');
       if ii <= 3
           optimOpts = optimoptions(optimOpts, 'Display', 'iter-detailed', 'MaxFunEvals', 200, 'GradObj', 'off');
       end
@@ -213,6 +213,11 @@ for ii = 1:opts.maxiter
     [~,M2]        = ds.utilIONLDS.utTransform_ymHx(obj);
     obj.par.R     = M2 ./ obj.d.T;
     if opts.diagR; obj.par.R = diag(diag(obj.par.R)); end
+    if multiStep==1
+        obj.filter('ukf', true, [], fOpts);
+        obj.smooth('ukf', [], fOpts);
+        dbgLLH.R  = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh]; 
+    end
     
     % ========= (:?) INITIAL DISTN =====================================
     % Not entirely comfortable about this

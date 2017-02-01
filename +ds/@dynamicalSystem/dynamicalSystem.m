@@ -113,24 +113,30 @@ classdef dynamicalSystem < handle
          
       end
       
-      function generateData(obj)
-          obj.x       = zeros(obj.d.x, obj.d.T+1);
-          obj.y       = zeros(obj.d.y, obj.d.T);
-          obj.x(:,1)  = obj.par.x0.mu;
+      function yy = generateData(obj)
+          xx       = zeros(obj.d.x, obj.d.T+1);
+          yy       = zeros(obj.d.y, obj.d.T);
+          xx(:,1)  = obj.par.x0.mu;
+          yyHat    = zeros(obj.d.y, obj.d.T);
           
           transChol   = chol(obj.par.Q);
           emissChol   = chol(obj.par.R);
           for tt = 1:obj.d.T
               u_t = [];
               if any(obj.hasControl); u_t = obj.u(:,tt); end
-              obj.x(:,tt+1) = obj.doTransition(obj.x(:,tt), u_t) + transChol * randn(obj.d.x,1);
-              obj.yhat(:,tt)= obj.doEmission(obj.x(:,tt+1), u_t);
-              obj.y(:,tt)   = obj.yhat(:,tt) + emissChol * randn(obj.d.y,1);
+              xx(:,tt+1)    = obj.doTransition(xx(:,tt), u_t) + transChol * randn(obj.d.x,1);
+              yyHat(:,tt)   = obj.doEmission(xx(:,tt+1), u_t);
+              yy(:,tt)      = yyHat(:,tt) + emissChol * randn(obj.d.y,1);
               
               %plot(obj.par.H(1,:) * obj.x(:,1:tt-1), obj.par.H(2,:) * obj.x(:,1:tt-1)); hold on; plot(obj.y(1,1:tt-1), obj.y(2,1:tt-1)); hold off;
               %pause
           end
-          obj.x       = obj.x(:,2:end);
+          if nargout == 0
+              % overwrite existing values.
+              obj.x       = xx(:,2:end);
+              obj.y       = yy;
+              obj.yhat    = yyHat;
+          end
       end
       
       % Make a copy of a handle object.
@@ -142,7 +148,7 @@ classdef dynamicalSystem < handle
           this.opts.warnings = curWarns;
       end
       
-      function getFittedValues(obj)
+      function fitted = getFittedValues(obj)
           obj.ensureInference('FITVALS', 'smooth');
           fitted = zeros(obj.d.y, obj.d.T);
           for tt = 1:obj.d.T
@@ -150,7 +156,10 @@ classdef dynamicalSystem < handle
               if any(obj.hasControl); u_t = obj.u(:,tt); end
               fitted(:,tt) = obj.doEmission(obj.infer.smooth.mu(:,tt), u_t);
           end
-          obj.yhat = fitted;
+          if nargout == 0
+              % overwrite existing values.
+              obj.yhat = fitted;
+          end
       end
       
       function fitted = getPredictedValues(obj, nlookahead)
@@ -280,7 +289,7 @@ classdef dynamicalSystem < handle
           assert(ischar(caller), 'caller must be of type char');
           if nargin < 3; type = 'smooth'; end
           assert(ischar(type) && any(ismember(type, {'filter', 'smooth'})), 'type must be ''filter'' or ''smooth''');
-          if ~strcmp(obj.infer.fpHash, obj.parameterHash)
+          if obj.parametersChanged
               if obj.opts.warnings; fprintf('%s: posterior does not match current parameters', upper(caller)); end
               if obj.evoLinear && obj.emiLinear
                   if obj.opts.warnings; fprintf('... fixed!\n'); end
@@ -299,7 +308,7 @@ classdef dynamicalSystem < handle
       function llh = logLikelihood(obj, fType, utpar, opts)
           if nargin < 4 || isempty(opts); opts = struct; end
           if nargin < 3 || isempty(utpar); utpar = struct; end
-          if nargin < 2 || isempty(fType); fType = []; end
+          if nargin < 2 || isempty(fType); fType = obj.infer.sType; end
           tmpobj = obj.copy;
           tmpobj.filter(fType, true, utpar, opts);
           llh    = tmpobj.infer.llh;

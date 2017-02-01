@@ -37,7 +37,7 @@ classdef ionlds < ds.dynamicalSystem
       end
       
       % modified superclass methods
-      [a,q]              = expLogJoint(obj); % Q(theta, theta_n) / free energy less entropy
+      [a,D,q]            = expLogJoint(obj, varargin); % Q(theta, theta_n) / free energy less entropy
       D                  = getGradient(obj, par, doCheck) % get gradient of parameters
       [llh, niters]      = parameterLearningEM(obj, opts); % do learning
    end

@@ -188,7 +188,8 @@ for ii = 1:opts.maxiter
             obj.par.A    = prevA;   % reset to last good A
             obj.par.A    = stabiliseA_constraintGeneration(obj, prevA, opts.stableVerbose); % see mini function below ????
             if max(abs(eig(obj.par.A))) > 1
-                keyboard
+                 iterBar.updateText([iterBar.text, '*']);
+%                 keyboard
             end
 %             newLLH       = obj.logLikelihood;
 %             if newLLH < prevLLH

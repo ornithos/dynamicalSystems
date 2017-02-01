@@ -64,6 +64,13 @@ function [a, q] = expLogJoint(obj, varargin)
     
     q(4)    = -0.5*T*trace((tmpobj.par.R)\(s.D - s.B*H' - H*s.B' + H*s.SIGMA*H' + ctrlAdd));
     
+    % x0
+    parV0   = tmpobj.par.x0.sigma;
+    parm0   = tmpobj.par.x0.mu;
+    P0      = tmpobj.infer.smooth.x0.sigma;
+    m0      = tmpobj.infer.smooth.x0.mu;
+    q(5)    = -0.5*utils.math.logdet(2*pi*parV0) -0.5*trace((parV0)\(P0 + (m0-parm0)*(m0-parm0)'));
+    
     %%
     if opts.freeEnergy
         % entropy calculation for free energy
@@ -73,7 +80,8 @@ function [a, q] = expLogJoint(obj, varargin)
         fullcov = ds.utils.fullJointCovariance(obj);
         detArg  = 2*pi*fullcov;
         L       = chol(detArg);
-        q(5)    = 0.5*2*sum(log(diag(L))) + obj.d.T*obj.d.x./2;  % logdet = 2*sum(log(diag(chol(.))))
+        q(6)    = 0.5*2*sum(log(diag(L))) + (obj.d.T+1)*obj.d.x./2;  % logdet = 2*sum(log(diag(chol(.))))
+        % T + 1 since posterior from 0:T.
     end
     
     a       = sum(q);

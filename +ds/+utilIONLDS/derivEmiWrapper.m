@@ -29,8 +29,8 @@ function [f, d] = derivEmiWrapper(obj, x)
 
         d(dy*0 + consec) = D.m;
         d(dy*1 + consec) = D.M;
-        d(dy*2 + consec) = D.gamma;
-        d(dy*3 + consec) = D.b;
+        d(dy*2 + consec) = D.nu;
+        d(dy*3 + consec) = D.gamma;
     %     d(dy*4+1:end) = 0;
         d((dy*4 + 1):end)= D.C(:);
         
