@@ -1,4 +1,4 @@
-function [f, d] = derivEmiWrapper(obj, x)
+function [f, d] = derivEmiWrapper(obj, x, varargin)
     % [f, d] = derivEmiWrapper(obj, x)
     % Wrapper for optimisation of derivative of emission parameters. Allows
     % function call from vector of parameters and returns vector of
@@ -21,7 +21,7 @@ function [f, d] = derivEmiWrapper(obj, x)
     
     % get function val and gradient
     if nargout > 1
-        [f, D] = obj.expLogJoint;
+        [f, D] = obj.expLogJoint(varargin{:});
         
         % reorganise output
         d                = zeros(size(x));
@@ -36,7 +36,7 @@ function [f, d] = derivEmiWrapper(obj, x)
         
         d                = -d;  % see below (negation)
     else
-        f = obj.expLogJoint;
+        f = obj.expLogJoint(varargin{:});
     end
     
     % reset object parameters (is a handle object)

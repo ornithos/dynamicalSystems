@@ -29,8 +29,24 @@ function [a, D, q] = expLogJoint(obj, varargin)
     %            inference.
     %
     
-    optsDefault = struct('freeEnergy', false, 'recalcPosterior', false, 'utpar', []);
+    optsDefault = struct('freeEnergy', false, 'recalcPosterior', false, ...
+                         'utpar', [], 'gamma', false);
+                         
     opts        = struct;
+    
+    % accept struct inputs
+    if nargin > 1
+        while ~isempty(varargin)
+            if isstruct(varargin{1})
+                opts = utils.struct.structCoalesce(varargin{1}, opts);
+                varargin(1) = [];
+            else
+                break
+            end
+        end
+    end
+    
+    % name-value inputs
     narargin = numel(varargin);
     assert(mod(narargin,2)==0, 'arguments to expLogJoint must come in name-value pairs');
     for kk = 0:(narargin/2-1)
@@ -81,6 +97,9 @@ function [a, D, q] = expLogJoint(obj, varargin)
 
         eta   = obj.par.emiNLParams.eta;
         m     = eta(:,1); M = eta(:,2); nu = eta(:,4); gamma = eta(:,4);
+        if ~opts.gamma  % roll gamma into C -> overparameterised.
+            gamma = ones(size(gamma));
+        end
         
         C     = [obj.par.emiNLParams.C];
         
@@ -91,7 +110,7 @@ function [a, D, q] = expLogJoint(obj, varargin)
         %
         %           (useful quantities #1)
         
-        XSP          = [ones(1, size(XSP,2)); XSP];  % prepend one for bias
+        %XSP          = [ones(1, size(XSP,2)); XSP];  % prepend one for bias
         CXSP         = C * XSP;
         gCX          = bsxfun(@times, gamma, CXSP);
         expmgCX      = exp(-gCX);
@@ -134,6 +153,7 @@ function [a, D, q] = expLogJoint(obj, varargin)
         D.M          = Dtmp(:,2);
         D.nu         = Dtmp(:,3);
         D.gamma      = Dtmp(:,4);
+        %if ~opts.gamma; D.gamma = ones(size(D.gamma)); end
 
         % ================================================================
         % ================================================================

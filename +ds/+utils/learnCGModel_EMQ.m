@@ -1,4 +1,4 @@
-function M = learnCGModel_EMQ(S1, S2, Vsum, Csum, Q, M_init, verbose)
+function [M, exitflag, val] = learnCGModel_EMQ(S1, S2, Vsum, Csum, Q, M_init, M_prev, verbose)
 % LEARNCGMODEL Learns the dynamics matrix of a Linear Dynamical System 
 % (LDS) from states using the constraint generation algorithm.
 %
@@ -54,7 +54,8 @@ function M = learnCGModel_EMQ(S1, S2, Vsum, Csum, Q, M_init, verbose)
 %                                     above paper.
 % Nov 16  - Alex Bird               - few minor tweaks for input, verbosity
 %                                     and stability.
-%
+% Feb 17  - Alex Bird               - Add'l arguments and outputs for
+%                                     diagnosing problems, reusing solns
 
 warning off optim:quadprog:SwitchToMedScale;
 
@@ -111,6 +112,8 @@ h = [];
 % first M is learned unconstrained
 %fprintf('calculating initial M...\n');
 M_init = M_init';
+M_prev = M_prev';
+
 %M = pinv(S1')*S2';
 M = M_init;
 lsscore = norm(S1'*M - S2','fro')^2;
@@ -161,7 +164,7 @@ for i = 1:1000
     % We want to minimize m'*P*m - 2*q'*m + r, whereas    
     % for quadprog, the objective is to minimize x'*H*x/2  + f'*x
     % with constraints Gx - h <= 0, so have to flip some signs ..
-    [m,val] = quadprog(2*P,2*(-q),G,h,[],[],[],[],M_init(:), options);
+    [m,val,exitflag] = quadprog(2*P,2*(-q),G,h,[],[],[],[],M_init(:), options);
 
 %    CAN ALSO USE CVX INSTEAD OF QUADPROG:
 %    val = 0;
@@ -286,8 +289,9 @@ end
 % QP - however it will not be by much)
 
 % returning dynamics matrix in proper orientation
-if M_init(:)'*P*M_init(:) -2*M_init(:)'*q < (Mbest(:)'*P*Mbest(:) -2*Mbest(:)'*q)*1.0001
-    M = M_init';
+
+if M_prev(:)'*P*M_prev(:) -2*M_prev(:)'*q < (Mbest(:)'*P*Mbest(:) -2*Mbest(:)'*q) %*1.0001
+    M = M_prev';
 else
     M = M';
 end

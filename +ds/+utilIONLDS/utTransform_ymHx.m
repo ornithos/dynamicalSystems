@@ -17,7 +17,7 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx(obj, alpha, beta, kappa)
     if nargin == 1
         alpha = 1;
         beta  = 0;
-        kappa = 3-n;
+        kappa = 0;
     else
         assert(utils.is.numscal(alpha), 'alpha must be a numeric scalar');
         assert(utils.is.numscal(beta), 'beta must be a numeric scalar');

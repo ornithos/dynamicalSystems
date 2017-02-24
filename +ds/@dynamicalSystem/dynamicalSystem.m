@@ -165,6 +165,13 @@ classdef dynamicalSystem < handle
       function fitted = getPredictedValues(obj, nlookahead)
           if nargin < 2; nlookahead = 0; end
           obj.ensureInference('PREDVALS', 'filter');
+          
+          if nlookahead == -Inf
+              fitted = getFittedValues(obj);
+              return;
+          end
+          assert(nlookahead >= 0, 'lagged smoothing values not implemented. Try nlookahead=-Inf for Smoothed');
+          
           fitted = zeros(obj.d.y, obj.d.T - nlookahead);
           for tt = 1:obj.d.T - nlookahead
               x_t = obj.infer.filter.mu(:,tt);
@@ -356,7 +363,17 @@ classdef dynamicalSystem < handle
           obj.stack{obj.stackptr,1} = insertion;
           obj.stack{obj.stackptr,2} = descr;
       end
-        
+      
+      function stackOverwrite(obj, insertion, descr, pos)
+          maxIdx = size(obj.stack, 1);
+          if pos >= maxIdx
+              obj.stack = [obj.stack; cell(100,2)];
+          end
+          obj.stackptr = max(obj.stackptr, pos);
+          obj.stack{pos,1} = insertion;
+          obj.stack{pos,2} = descr;
+      end
+      
       function stackDelete(obj, pos)
           if obj.stackptr <= 0
               fprintf('Empty save stack. Nothing to do.\n');

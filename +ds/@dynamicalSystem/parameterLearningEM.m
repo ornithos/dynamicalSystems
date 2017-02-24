@@ -6,7 +6,7 @@ optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL'
                         'multistep', 4, 'diagQ', false, 'diagR', false, ...
                         'sampleStability', 1, 'stableVerbose', false, ...
                         'annealingSchedule', Inf, 'annealingIter', 10, ...
-                        'annealingMin', 1e-6);
+                        'annealingMin', 1e-6, 'strictNegativeCheck', false);
 optsDefault     = utils.base.parse_argumentlist(obj.opts, optsDefault, false);      % bring in global opts
 opts            = utils.base.parse_argumentlist(opts, optsDefault, false);          % add user specified opts.
 
@@ -129,7 +129,13 @@ for ii = 1:opts.maxiter
     %     is 1 since should still be monotonic if every iter stable.
     % --- Deterministic annealing artificially reflates the variance so no
     %     guarantees if beta < 1.
-    if delta < -1e-8 && da.cur == 1 && ~(prevStepWasConstrained && ~(opts.sampleStability == 1))
+    if opts.strictNegativeCheck
+        negativeLlhStep = dbgLLH.R(1) < -1e-8 || dbgLLH.Q(1) < -1e-8 || dbgLLH.A(1) < -1e-8 || dbgLLH.H(1) < 1e-8;
+    else
+        negativeLlhStep = delta < -1e-8 && da.cur == 1 && ~(prevStepWasConstrained && ~(opts.sampleStability == 1));
+    end
+    
+    if negativeLlhStep && ii > 1
         iterBar.updateText([iterBar.text, '*']);
         if multiStep == 1
             % basically things have gone really wrong by here..

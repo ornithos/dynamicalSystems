@@ -64,7 +64,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
     % get all sufficient statistics
     s   = obj.suffStats(struct('bIgnoreHash', true, 'anneal', opts.anneal));
 
-    eps = 1e-8./obj.d.T;   % 'kind-of' prior to avoid instability in covariances.
+    eps = 0;% 1e-8./obj.d.T;   % 'kind-of' prior to avoid instability in covariances.
     
     % opts to stop log likelihood doing unnecessary work
     fOpts = struct('bDoValidation', false, 'bIgnoreHash', true);
