@@ -185,6 +185,31 @@ classdef dynamicalSystem < handle
               fitted(:,tt) = obj.doEmission(x_t, u_t);
           end
       end
+      
+      function predict = getPredictFreeRun(obj, t, l)
+          % predict from (time t), (l datapoints) forward
+          if nargin < 2; t = 1; end
+          assert(utils.is.scalarint(t) && t > 0 && t <= obj.d.T, 't must be a scalar int in 1,...,T');
+          if nargin < 3
+              if t == obj.d.T; error('length of output l must be specified'); end
+              l = obj.d.T - t; 
+          end
+          assert(utils.is.scalarint(l) && l > 0, 'l must be a positive scalar int');
+          obj.ensureInference('PREDVALS', 'filter');
+          
+          predict = zeros(obj.d.y, l);
+          x_t = obj.infer.filter.mu(:, t);
+          for tt = t+1:t+l
+              if tt <= obj.d.T && any(obj.hasControl)
+                  u_t = obj.u(:,tt); 
+              else
+                  u_t = 0;
+              end
+              x_t             = obj.doTransition(x_t, u_t);
+              predict(:,tt-t) = obj.doEmission(x_t, u_t);
+          end
+      end
+      
         
       %% ----- Save user interfaces --------------------
       function save(obj, descr)
@@ -321,13 +346,22 @@ classdef dynamicalSystem < handle
           llh    = tmpobj.infer.llh;
       end
       
+      function removeControl(obj)
+            if ~obj.hasControl
+                warning('obj does not have a control to remove');
+            end
+            obj.hasControl = false(2,1);
+            obj.u = [];
+      end
+        
       % --- prototypes -------------------
       % inference / learning 
       [a,q]         = expLogJoint(obj, varargin); % Q(theta, theta_n) / free energy less entropy
 %       obj = filterKalman(obj, bDoLLH, bDoValidation); % Kalman Filter
 %       obj = filterExtended(obj, bDoLLH, bDoValidation); % Extended (EKF) Filter
 %       obj = filterUnscented(obj, bDoLLH, bDoValidation, utpar); % Unscented (UKF) Filter
-      filter(obj, fType, bDoLLH, utpar, opts) % one of dynamics linear, other piped to NL.
+      D             = filter(obj, fType, bDoLLH, utpar, opts) % one of dynamics linear, other piped to NL.
+      val           = tempFilterGrad(obj, fType, bDoLLH, utpar, opts, var) % DELETE ME!
       D             = getGradient(obj, par, doCheck) % get gradient of parameters
 %       obj = smoothLinear(obj, bDoValidation); % RTS Smoother
 %        obj = smoothExtended(obj, bDoValidation); % Extended (EKF) RTS Smoother

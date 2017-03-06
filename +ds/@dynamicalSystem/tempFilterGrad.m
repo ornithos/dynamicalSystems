@@ -1,4 +1,8 @@
-function D = filter(obj, fType, bDoLLH, utpar, opts)
+function val = tempFilterGrad(obj, fType, bDoLLH, utpar, opts, var)
+    % **** COPY OF ds@dynamicalSystem.filter WITH ADDITIONAL *****
+    % **** EVALUATION OF SOME PARAMETER ('var') FOR USE **********
+    % **** IN NUMERICAL GRADIENT CALCULATIONS. *******************
+    
     % filter(obj, fType, bDoLLH, utpar, opts)
     % Dynamical System Filtering for general dynamics as described in eg. 
     % Särkkä (2013). If transition and/or emission dynamics are non-linear, 
@@ -51,9 +55,9 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
     utpar        = utils.struct.structCoalesce(utpar, utparDefault);
     
     if ~opts.bCollectGradient
-        if nargout > 0
-            error('filter output (= gradient) unavailable unless bCollectGradient = true');
-        end
+%         if nargout > 0
+%             error('filter output (= gradient) unavailable unless bCollectGradient = true');
+%         end
     else
         D = ds.utils.dgradInitialise(obj);
     end
@@ -148,6 +152,7 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
     obj.infer.fType          = inpFtype;
     obj.infer.sType          = '';
     obj.infer.filter.utpar   = utpar;
+    val = eval(var);
 end
 
 function par = getParams(obj, stage, type)

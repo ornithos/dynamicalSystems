@@ -190,8 +190,8 @@ for ii = 1:opts.maxiter
                 iterBar.clearConsole;
                 fprintf('Stabilising A with constraint generation... ');
             end
-            badA         = obj.par.A;
-            obj.par.A    = prevA;   % reset to last good A
+%             badA         = obj.par.A;
+%             obj.par.A    = prevA;   % reset to last good A
             obj.par.A    = stabiliseA_constraintGeneration(obj, prevA, opts.stableVerbose); % see mini function below ????
             if max(abs(eig(obj.par.A))) > 1
                  iterBar.updateText([iterBar.text, '*']);
@@ -261,7 +261,7 @@ llh = llh(2:ii+1);
 end
 
 
-function A = stabiliseA_constraintGeneration(obj, curEstimate, verbose)
+function A = stabiliseA_constraintGeneration(obj, prvEstimate, verbose)
     % -- what about x0 estimates?
     m          = obj.infer.smooth.mu;
 %     P          = obj.infer.smooth.sigma;
@@ -280,5 +280,5 @@ function A = stabiliseA_constraintGeneration(obj, curEstimate, verbose)
     metric    = obj.par.Q; % doesn't seem to make a difference...?
     metric    = eye(obj.d.x);
 %     sumP      = (sumP + sumP)./2;
-    A         = ds.utils.learnCGModel_EMQ(S1, S2, s.PHI, s.C', metric, curEstimate, verbose);
+    A         = ds.utils.learnCGModel_EMQ(S1, S2, s.PHI, s.C', metric, obj.par.A, prvEstimate, verbose);
 end

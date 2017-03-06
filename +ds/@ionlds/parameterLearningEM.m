@@ -156,7 +156,7 @@ for ii = 1:opts.maxiter
         monotoneLlhFail = dbgLLH.R(1) < -1e-8 || dbgLLH.Q(1) < -1e-8 || dbgLLH.A(1) < -1e-1 || dbgLLH.H(1) < 1e-8;
     else
         % more generous usual monotone checking
-        monotoneLlhFail = delta < -1e-8 && da.cur == 1 && ~(prevStepWasConstrained && ~(opts.sampleStability == 1));
+        monotoneLlhFail = delta < -1e-8 && ~(prevStepWasConstrained && ~(opts.sampleStability == 1));
     end
     
     if monotoneLlhFail && ii > 1
@@ -166,7 +166,7 @@ for ii = 1:opts.maxiter
             iterBar.clearConsole;
             fprintf('min eigv Q = %.3e', min(eig(obj.par.Q)));
             fprintf(', min eigv R = %.3e\n', min(eig(obj.par.R)));
-            keyboard
+%             keyboard
 %             if opts.dbg; keyboard; end
         elseif opts.sampleStability > 1
             % only periodically sampling stability of A leads to jumps..
@@ -231,6 +231,12 @@ for ii = 1:opts.maxiter
             obj.filter('ukf', true, [], fOpts);
             obj.smooth('ukf', [], fOpts);
             dbgLLH.A  = [obj.infer.llh - dbgLLH.x0(2), obj.infer.llh];
+            if prevStepWasConstrained
+                obj.parameterLearningMStep({'B'}, mstepOpts);
+                obj.filter('ukf', true, [], fOpts);
+                obj.smooth('ukf', [], fOpts);
+                dbgLLH.A  = [obj.infer.llh - dbgLLH.x0(2), obj.infer.llh];
+            end
         end
 %     obj.parameterLearningMStep({'B'}, mstepOpts);
 %     if obj.logLikelihood < dbgLLH.A(2)
