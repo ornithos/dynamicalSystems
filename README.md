@@ -9,6 +9,7 @@ A MATLAB package for inference and learning in (discrete time) Linear Dynamical 
 * Loglikelihood, expected log joint, and free energy available for debugging at any stage.
 * GUI available for comparing filter/smooth/learning in the 2D case.
 
+-------------------------------------------------------------
 ## Using the package
 ### Examples
 
@@ -22,8 +23,8 @@ dsCircle.save('original-copy');   %  "     "          "
 ds.gui.posteriorGaussGUI(dsCircle, 'original', 'original-copy');   % hack to use the GUI for easy viewing
 ```
 
-```matlab
 #### Newton dynamics
+```matlab
 % Newtonian dynamics (4D state space to keep linear system with acc/veloc)
 deltaT              = 0.5;
 transition          = eye(4);
@@ -42,6 +43,8 @@ dsNewton.save('original-params');
 #### Regression with drift...
 Can't do this yet since `A` matrix fixed. If this is allowed to vary and equal the inputs, then we're done.
 
+
+-------------------------------------------------------------
 ### Specifying the object
 The input parser is fairly flexible and thus may be a little intimidating initially. This demonstrates the flexibility of the models permitted by the dynamicalSystems object. It is built to be fairly robust and forgiving: examples are given below. A full specification is:
 
@@ -119,6 +122,8 @@ dynamicalSystem(..., 'opts', s, ...
 ```
 where `s` is a struct containing a subset of the fields `{'warnings', 'verbose'}`. These are scalar boolean fields that dictate the verbosity of the dynamicalSystem object. No other options are currently accepted.
 
+
+-------------------------------------------------------------
 ### Methods
 Let's assume we have an object
 ```matlab
