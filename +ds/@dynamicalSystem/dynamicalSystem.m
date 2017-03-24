@@ -347,13 +347,30 @@ classdef dynamicalSystem < handle
       end
       
       function removeControl(obj)
-            if ~obj.hasControl
+            if ~any(obj.hasControl)
                 warning('obj does not have a control to remove');
             end
             obj.hasControl = false(2,1);
             obj.u = [];
       end
-        
+      function addControl(obj, u, evo, emi)
+            assert(~any(obj.hasControl), 'obj already has control');
+            assert(nargin == 4, 'require 3 arguments: u, evo (bool), emi (bool)');
+            assert(isscalar(evo) && islogical(evo), 'evo must be scalar boolean');
+            assert(isscalar(emi) && islogical(emi), 'emi must be scalar boolean');
+            assert(size(u, 2) == obj.d.T, 'u must have T = %d columns', obj.d.T);
+            
+            obj.hasControl = [evo, emi];
+            obj.d.u        = size(u, 2);
+            if evo && (isempty(obj.par.B) || all(size(obj.par.B) == [obj.d.x, obj.d.u]))
+                obj.par.B      = zeros(obj.d.x, obj.d.u);
+            end
+            if emi && (isempty(obj.par.C) || all(size(obj.par.C) == [obj.d.y, obj.d.u]))
+                obj.par.C      = zeros(obj.d.y, obj.d.u);
+            end
+            obj.u = u;
+      end
+      
       % --- prototypes -------------------
       % inference / learning 
       [a,q]         = expLogJoint(obj, varargin); % Q(theta, theta_n) / free energy less entropy

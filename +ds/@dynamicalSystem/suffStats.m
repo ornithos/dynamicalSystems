@@ -3,6 +3,18 @@ function s = suffStats(obj, opts)
 % Calculates the various quantities used in Särkkä's parameter estimation
 % equations. They are typically pairwise expectations.
 % opts: verbose, bIgnoreHash, bDoValidation
+%
+% OUTPUTS:
+%  - SIGMA = <x_t, x_t>
+%  - PHI   = <x_{t-1}, x_{t-1}>
+%  - B     = <y_t, x_t>
+%  - C     = <x_t, x_{t-1}>
+%  - D     = <y_t, y_t>
+%
+%  - XU    = <x_t, u_t>
+%  - Xm1_U = <x_{t-1}, u_t>
+%  - UU    = <u_t, u_t>
+
 if nargin < 2 || isempty(opts)
     opts = struct;
 end

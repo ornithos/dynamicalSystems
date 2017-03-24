@@ -58,7 +58,8 @@ function parameterLearningMStep(obj, updateOnly, opts)
         return
     end
     
-    optsDefault = struct('verbose', true, 'diagQ', false, 'diagR', false, 'anneal', 1);
+    optsDefault = struct('verbose', true, 'diagQ', false, 'diagR', false, ...
+                         'diagA', false, 'diagAconstraints', [-1,1], 'anneal', 1);
     opts        = utils.base.parse_argumentlist(opts, optsDefault, true);
     
     % get all sufficient statistics
@@ -75,18 +76,48 @@ function parameterLearningMStep(obj, updateOnly, opts)
     % ______________ A (And B) updates ___________________________________
     matchesAB = ismember({'A','B'}, updateOnly);
     if any(matchesAB)
-        if obj.hasControl(1)
-            if all(matchesAB)
-                AB          = [s.C, s.XU] / [s.PHI, s.Xm1_U; s.Xm1_U', s.UU];
-                obj.par.A   = AB(:, 1:obj.d.x);
-                obj.par.B   = AB(:, obj.d.x+1:end);
+        % A / B updates where A is unconstrained - a full matrix
+        if ~opts.diagA
+            if obj.hasControl(1)
+                if all(matchesAB)
+                    AB          = [s.C, s.XU] / [s.PHI, s.Xm1_U; s.Xm1_U', s.UU];
+                    obj.par.A   = AB(:, 1:obj.d.x);
+                    obj.par.B   = AB(:, obj.d.x+1:end);
+                elseif matchesAB(1)
+                    obj.par.A   = (s.C -  obj.par.B * s.Xm1_U') / s.PHI;
+                elseif matchesAB(2)
+                    obj.par.B   = (s.XU - obj.par.A * s.Xm1_U) / s.UU;
+                end
             elseif matchesAB(1)
-                obj.par.A   = (s.C -  obj.par.B * s.Xm1_U') / s.PHI;
-            elseif matchesAB(2)
+                obj.par.A   = s.C / s.PHI;
+            end
+        else
+        % A / B updates where A is constrained to be diagonal. This is not
+        % the same as projecting optimum of A onto the space of diag mats.
+            if matchesAB(1)
+                psi = inv(obj.par.Q);   % .. not ideal
+                if ~obj.hasControl(1)
+                    tmp = s.C';
+                else
+                    tmp = s.C' -  s.Xm1_U * obj.par.B';
+                end
+                v   = diag(tmp * psi);  %#ok (<- preproc) numericall less stable, but more efficient.
+                M   = s.PHI .* psi;
+                % solve
+                a   = M\v;
+                
+                % ? possible projection constraints
+                if numel(opts.diagAconstraints) == 2
+                    con = sort(opts.diagAconstraints);
+                    a   = max(min(a, con(2)), con(1));
+                else
+                    error(isempty(opts.diagAconstraints), 'diagAconstraints must be a 2 element vector or empty');
+                end
+                obj.par.A = diag(a);
+            end
+            if matchesAB(2) && obj.hasControl(1)
                 obj.par.B   = (s.XU - obj.par.A * s.Xm1_U) / s.UU;
             end
-        elseif matchesAB(1)
-            obj.par.A   = s.C / s.PHI;
         end
     end
     

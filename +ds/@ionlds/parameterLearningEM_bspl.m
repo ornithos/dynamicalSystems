@@ -1,4 +1,4 @@
-function [llh, ii] = parameterLearningEM(obj, opts)
+function [llh, ii] = parameterLearningEM_bspl(obj, opts)
 
 if nargin < 2 || isempty(opts); opts = struct; end
 optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL', 5, ...
@@ -53,29 +53,8 @@ for oname = optFds   % fixA, fixQ, fix....
     end
 end
 
-% Optimisation options
-optimDisplay       = 'none';    % 'iter-detailed'
-% optimType          = 'analytic';  % 'auto', 'analytic', 'debug-analytic'
-
-optimOpts          = optimoptions('fminunc','Algorithm','quasi-newton','Display', optimDisplay);
-switch opts.optimType
-    case 'analytic'
-        optimOpts = optimoptions(optimOpts, 'SpecifyObjectiveGradient',true); 
-    case 'analytic-debug'
-        optimOpts = optimoptions(optimOpts, 'CheckGradients',true, 'FiniteDifferenceType', 'central');
-    case 'auto'
-        optimOpts = optimoptions(optimOpts, 'FiniteDifferenceType', 'forward');
-    otherwise
-        error('unknown optimType specified. Choose from ''auto'', ''analytic'', ''analytic-debug''');
-end
 
 eljOpts            = struct('gamma', opts.gamma);
-optimEmi.options   = optimOpts;
-optimEmi.objective = @(x) ds.utilIONLDS.derivEmiWrapper(obj, x, eljOpts);
-optimEmi.solver    = 'fminunc';
-optimEmi.x0        = [obj.par.emiNLParams.eta(:); obj.par.emiNLParams.C(:)];
-LARGE_OPTIM_ITER   = 400;
-SMALL_OPTIM_ITER   = 200;
 
 % remove linear updates where non-linear function
 if ~obj.evoLinear
@@ -260,21 +239,22 @@ for ii = 1:opts.maxiter
         end
        
     % ========= Optimise Nonlinear emission function ===================
-    if ~strcmp(optimDisplay, 'none')
-        fprintf('\n');
-        iterBar.currOutputLen = 0;
-    end
-    
-      if ii <= 3
-          optimOpts = optimoptions(optimOpts, 'Display', 'off', 'MaxFunEvals', LARGE_OPTIM_ITER, 'GradObj', 'off');
-      elseif ii < opts.maxiter
-          optimOpts = optimoptions(optimOpts, 'Display', 'off', 'MaxFunEvals', SMALL_OPTIM_ITER, 'GradObj', 'off');
-      else
-          optimOpts = optimoptions(optimOpts, 'Display', 'off', 'MaxFunEvals', LARGE_OPTIM_ITER, 'GradObj', 'off');
-      end
-      optimEmi.options = optimOpts;
       
     if opts.dbg; [F,~,q] = obj.expLogJoint('freeEnergy', true); end
+    
+    for ii = 1:iterNonlinInner
+        % need 
+        %  (a) bspline basis which is not immediately available from fn
+        %  wrapper.
+        %  (b) to do this in the context of the rest of the (approx) ELJ.
+        
+        splB = cumB_RL= fliplr(cumsum(fliplr(B),2));
+        [tmp,~,~,xfl] = lsqnonneg(cumB_RL, y-c);
+        utils.optim.optimMessage(xfl, 'onlyErrors', true);
+
+        coeff = cumsum(tmp);
+    end
+    
     emiOptOut     = fminunc(optimEmi);  % <- magic happens here
     optimEmi.x0   = emiOptOut;
     obj.par.emiNLParams.eta   = reshape(emiOptOut(1:obj.d.y*4), obj.d.y, 4);

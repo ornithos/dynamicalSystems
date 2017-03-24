@@ -3,7 +3,7 @@ function [llh, ii] = parameterLearningEM(obj, opts)
 if nargin < 2 || isempty(opts); opts = struct; end
 optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL', 5, ...
                         'verbose', true, 'dbg', false, 'validation', false, ...
-                        'multistep', 4, 'diagQ', false, 'diagR', false, ...
+                        'multistep', 4, 'diagA', false, 'diagQ', false, 'diagR', false, ...
                         'sampleStability', 1, 'stableVerbose', false, ...
                         'annealingSchedule', Inf, 'annealingIter', 10, ...
                         'annealingMin', 1e-6, 'strictNegativeCheck', false);
@@ -70,7 +70,8 @@ da.curIter      = 0;
 % ________ Get names of parameters which have been 'fixed' _______________
 % get options for Filtering and for M-step
 fOpts      = struct('bDoValidation', false, 'bIgnoreHash', true);
-mstepOpts  = struct('verbose', opts.dbg, 'diagQ', opts.diagQ, 'diagR', opts.diagR);
+mstepOpts  = struct('verbose', opts.dbg, 'diagQ', opts.diagQ, 'diagR', opts.diagR, ...
+                 'diagA', opts.diagA, 'diagAconstraints', [-1,1]);
 optFds     = fieldnames(opts);
 for oname = optFds   % fixA, fixQ, fix....
     if strcmp(oname(1:3), 'fix')
@@ -107,6 +108,10 @@ if ~(~opts.verbose && ~opts.stableVerbose)
     % else stableVerbose = 1 is the dots, stableVerbose = 2 is the full thing
     opts.stableVerbose = opts.stableVerbose + 1; 
 end
+
+if opts.diagA; obj.par.A = diag(diag(obj.par.A)); end
+if opts.diagQ; obj.par.Q = diag(diag(obj.par.Q)); end
+if opts.diagR; obj.par.R = diag(diag(obj.par.R)); end
 
 % Initialise dbg struct in case we need it..
 dbgLLH = struct('A',[0,0],'Q',[0,0],'H',[0,0],'R',[0,-Inf]);
@@ -183,7 +188,7 @@ for ii = 1:opts.maxiter
     
     % Check for stability of A: significant problems when A blows up.
     prevStepWasConstrained = false;
-    if mod(ii, opts.sampleStability) == 0
+    if mod(ii, opts.sampleStability) == 0 && ~opts.diagA
         if max(abs(eig(obj.par.A))) > 1 + sing_val_eps
             cgTic        = tic;
             if opts.stableVerbose > 1
