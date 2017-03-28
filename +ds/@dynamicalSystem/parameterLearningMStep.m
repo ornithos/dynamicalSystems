@@ -110,7 +110,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
                 if numel(opts.diagAconstraints) == 2
                     con = sort(opts.diagAconstraints);
                     a   = max(min(a, con(2)), con(1));
-                else
+                elseif ~isempty(opts.diagAconstraints)
                     error(isempty(opts.diagAconstraints), 'diagAconstraints must be a 2 element vector or empty');
                 end
                 obj.par.A = diag(a);
@@ -154,6 +154,8 @@ function parameterLearningMStep(obj, updateOnly, opts)
     matchesHC = ismember({'H','C'}, updateOnly);
     if any(matchesHC)
         if obj.hasControl(2)
+            if any(any(isnan(obj.y))); warning('NaNs not handled properly in emission learning'); end
+            % **** MASSIVE WARNING HERE: NANs NOT HANDLED YET IN THIS ****
             if all(matchesHC)
                 HC          = [s.B, s.XU] / [s.SIGMA, s.YU; s.YU', s.UU];
                 obj.par.H   = HC(:, 1:obj.d.x);
@@ -164,7 +166,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
                 obj.par.C   = (s.YU -  obj.par.H * s.XU)  / s.UU;
             end
         elseif matchesHC(1)
-            obj.par.H   = s.B / s.SIGMA;
+            obj.par.H   = s.B / s.SIGMEV;
         end
     end
     
@@ -175,9 +177,10 @@ function parameterLearningMStep(obj, updateOnly, opts)
     if any(strcmpi(updateOnly, 'R'))
         % original R update (without inputs)
         H           = obj.par.H;
-        R           = s.D - H*s.B' - s.B*H' + H*s.SIGMA*H';
+        R           = s.D - H*s.B' - s.B*H' + H*s.SIGMEV*H';
         
         if obj.hasControl(2)
+            if any(any(isnan(obj.y))); warning('NaNs not handled properly in emission learning'); end
             % --- additions to covariance from control inputs ----
             C       = obj.par.C;
             Cuy     = C * s.YU';

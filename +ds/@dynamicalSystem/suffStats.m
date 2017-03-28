@@ -7,9 +7,11 @@ function s = suffStats(obj, opts)
 % OUTPUTS:
 %  - SIGMA = <x_t, x_t>
 %  - PHI   = <x_{t-1}, x_{t-1}>
-%  - B     = <y_t, x_t>
-%  - C     = <x_t, x_{t-1}>
-%  - D     = <y_t, y_t>
+%  - C     = <x_t, x_{t-1}> 
+%  - B     = <y_t, x_t>          only for t in tau
+%  - D     = <y_t, y_t>          only for t in tau
+% (-SIGMEV = <x_t, x_t>          only for t in tau)
+%
 %
 %  - XU    = <x_t, u_t>
 %  - Xm1_U = <x_{t-1}, u_t>
@@ -38,8 +40,15 @@ end
 mu    = [obj.infer.smooth.x0.mu, obj.infer.smooth.mu];
 sigma = vertcat(obj.infer.smooth.x0.sigma, obj.infer.smooth.sigma);
 G     = vertcat(obj.infer.smooth.x0.G, obj.infer.smooth.G);
-y     = obj.y;
-T     = obj.d.T;
+
+% deal with missing values in y.
+y     = obj.impute_y('smooth', true, 'bIgnoreHash', true);
+yActv = ~all(isnan(obj.y),1);
+T     = find(yActv, 1, 'last');
+yActv = yActv(1:T);
+y     = y(:,1:T);
+y(:,~yActv) = 0;   % most suff stats are multiplicative, so it is convenient to zero all NaN values.
+
 
 % deterministic annealing of posterior:
 if opts.anneal < 1
@@ -59,16 +68,49 @@ end
 almostAllP = sum(cat(3,sigma{2:T}),3);
 almostAllM = mu(:,2:T) * mu(:,2:T)';
 s       = struct;
+
+% transition statistics
 s.SIGMA = (almostAllP + sigma{T+1} + almostAllM + mu(:,T+1) * mu(:,T+1)')./T;
 s.PHI   = (almostAllP + sigma{1} + almostAllM + mu(:,1) * mu(:,1)')./T;
-s.B     = (y * mu(:,2:T+1)')./T;
-s.D     = (y * y')./T;
 
 s.C     = mu(:,2:T+1) * mu(:,1:T)';
 for tt = 1:T
     s.C = s.C + sigma{tt+1} * G{tt}';
 end
 s.C     = s.C./T;
+
+% evolution statistics
+% yActv   = ~all(isnan(obj.y),1);   ---> see above
+ySemi   = any(isnan(obj.y(:,1:T)), 1);
+Ty      = sum(yActv);
+s.B     = (y * mu(:,2:T+1)')./Ty;   % only using non all-NaNs: since 0 for all NaNs (see above), and T is last non NaN.
+s.D     = (y * y')./Ty;           % only using non all-NaNs
+
+% ------------- MISSING VALUES -------------------------------
+% remove x_t terms which are not active
+s.SIGMEV= s.SIGMA.*T;
+for tt = find(~yActv)
+    s.SIGMEV = s.SIGMEV - sigma{tt+1} - mu(:,tt+1) * mu(:,tt+1)';   % + 1 because of x0
+end
+s.SIGMEV = s.SIGMEV./Ty;
+% add covariance into y where relevant
+for tt = find(yActv & ySemi)
+    mask = isnan(obj.y(:,tt));
+    Hu   = obj.par.H(mask,:);
+    Ho   = obj.par.H(~mask,:);
+    Ro   = obj.par.R(~mask, ~mask);
+    % D = < y_t, y_t >
+    adj  = (Hu * sigma{tt+1} * Hu')./Ty;
+    s.D(mask,mask) = s.D(mask,mask) + adj;
+    % B = < y_t, x_t >
+    % THIS IS TOTALLY WRONG. NEED THE JOINT DISTRIBUTION OF y_t, x_t | y_{1:T}
+    % WILL GIVE US MEAN
+    s.B  = s.B - (y(mask,tt) * mu(mask,tt+1)')./Ty;   % check
+    HoP  = Ho * sigma{tt+1};
+    adj  = ((Hu * HoP') / ( Ho * HoP' + Ro)) * (HoP * Hu');
+    s.B(mask, mask) = s.B(mask, mask) + adj;
+end
+
 
 % ----- Control quantities -----------------------------------
 if obj.hasControl(1)
@@ -78,7 +120,7 @@ if obj.hasControl(1)
 end
 
 if obj.hasControl(2)
-    s.YU      = (y * U(:,2:T+1)')./T;
+    s.YU      = (y(:,yActv) * U(:, find(yActv)+1)')./T;
 end
 
 if any(obj.hasControl)

@@ -388,7 +388,8 @@ classdef dynamicalSystem < handle
       [llh, niters] = parameterLearningEM(obj, opts);
       lhHist        = parameterLearnOnline(obj, fType, opts, utpar)
       
-      s             = suffStats(obj, opts);  % Sufficient statistics required for learning
+      s             = suffStats(obj, opts);      % Sufficient statistics required for learning
+      [y, covY]     = impute_y(obj, varargin);   % impute missing values into y ('filter'/'smooth', true);
       % graphical
       plotStep2D(obj, posteriorType)
    end

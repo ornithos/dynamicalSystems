@@ -145,6 +145,10 @@ function processInputArgs(obj, args)
             obj.x = xtrue;
         end
         
+        % Check for known problems
+        if any(any(obj.y)) && obj.hasControl(2)
+            warning('caveat emptor: NaNs not handled yet in EM learning for emission control input. Use EM with EXTREME CAUTION (ie don''t).');
+        end
 end
 
 function arg = internalProcessChar(arg, ii, doWarning)

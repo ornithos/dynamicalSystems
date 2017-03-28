@@ -86,9 +86,33 @@ function smooth(obj, sType, utpar, opts)
     smoothSigma  = vertcat(cell(obj.d.T-1, 1), P);
     smoothG      = cell(obj.d.T-1,1);
     
+    hasControl   = any(obj.hasControl);
+    
+    %% if nans --> end of sequence, we need to exclude backward step through
+    % these: they should only use forward step
+    bwdstart     = obj.d.T-1;   % usual case: no NaNs
+%     while all(isnan(obj.y(:,bwdstart+1)))
+%         
+%         % ---- All of this machinery to get G -----------------------
+%         if hasControl
+%             u_t = obj.u(:,bwdstart+1);   %tt=T-1 => u_{T} because [N(Ax_t-1 + Bu_t, Q)]
+%         else
+%             u_t = [];
+%         end
+%         
+%         fP_tt           = fSigma{bwdstart};
+%         fMu_tt          = fMu(:,bwdstart);
+%         [~, P_minus, covttp1] = ds.utils.assumedDensityTform(parPredict, fMu_tt, fP_tt, u_t, fType1, utpar);
+%         
+%         smoothG{bwdstart}      = covttp1 / P_minus; % in suffStats * by (now) filtered cov, so will be A * P.
+%         % ------------------------------------------------------------
+%         smoothMu(:, bwdstart)  = fMu_tt;          % filtered mean
+%         smoothSigma{bwdstart}  = fP_tt;           % filtered covariance
+%         bwdstart               = bwdstart - 1;
+%     end
+    
     %% -- Main Loop --
-    hasControl = any(obj.hasControl);
-    for tt = (obj.d.T-1):-1:1
+    for tt = bwdstart:-1:1
         % Prediction step
         if hasControl
             u_t = obj.u(:,tt+1);   %tt=T-1 => u_{T} because [N(Ax_t-1 + Bu_t, Q)]

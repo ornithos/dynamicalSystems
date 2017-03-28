@@ -12,13 +12,16 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
     % INPUTS:
     % fType        - type of filter: 'Kalman', 'Extended', 'Unscented'.
     % bDoLLH       - Calculate the log likelihood alongside the filtering
-    %                update. In non-linear models this is the approximate /
+    %                update. In non-linear models this is the approximate
     %                assumed log likelihood.
     % utpar        - struct containing parameters for Unscented Transform
     %                (alpha, beta, kappa). Ignored if UKF not fType.
     % opts         - additional opts struct to modify internals. Includes:
     %                'bDoValidation': if false, switch off inp validation,
     %                'bIgnoreHash': neither check or perform paramater Hash
+    %                'bCollectGradient' is currently implemented only as a
+    %                trial for parameter A. It does not work with missing
+    %                values as yet.
     %
     % OUTPUT:
     %  Returns object of type 'dynamicalSystem' with property
@@ -55,6 +58,7 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
             error('filter output (= gradient) unavailable unless bCollectGradient = true');
         end
     else
+        assert(sum(sum(isnan(obj.y))) == 0, 'No missing values allowed for current implementation of gradient');
         D = ds.utils.dgradInitialise(obj);
     end
     
@@ -76,8 +80,8 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
     if obj.evoLinear; fType1 = 0; end
     if obj.emiLinear; fType2 = 0; end
     
-    parPredict      = getParams(obj, 1, fType1);
-    parUpdate       = getParams(obj, 2, fType2);
+    parPredict      = internal_getParams(obj, 1, fType1);
+    parUpdate       = internal_getParams(obj, 2, fType2);
     llh             = 0;
     d               = obj.d.y;
     T               = opts.T;
@@ -109,19 +113,26 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
         [m_minus, P_minus, ~] = ds.utils.assumedDensityTform(parPredict, m, P, u, fType1, utpar);
         P_minus               = (P_minus+P_minus')/2;
         
-        % Update step
+        % Update step -- deal with missing values here
         if obj.hasControl(2), u = u_t;
         else, u = [];
         end
-        [m_y, S, covxy]   = ds.utils.assumedDensityTform(parUpdate, m_minus, P_minus, u, fType2, utpar);
-        S                 = (S+S')/2;
-        K                 = covxy / S;
-        %K                 = utils.math.mmInverseChol(covxy, cholS);
-        deltaY            = obj.y(:,tt) - m_y;
-        m                 = m_minus + K*deltaY;
-        P                 = P_minus - K * S * K';
+        y                 = obj.y(:,tt);
+        curMissing        = any(isnan(y));
+        if ~curMissing
+            [m_y, S, covxy]   = ds.utils.assumedDensityTform(parUpdate, m_minus, P_minus, u, fType2, utpar);
+            S                 = (S+S')/2;
+            K                 = covxy / S;
+            %K                 = utils.math.mmInverseChol(covxy, cholS);
+            deltaY            = y - m_y;
+            m                 = m_minus + K*deltaY;
+            P                 = P_minus - K * S * K';
+        else
+            [m, P, addlLLH]   = internal_updateStepMissing(obj, parUpdate, m_minus, P_minus, u, y, fType2, utpar, bDoLLH);
+            if bDoLLH; llh = llh + addlLLH; end
+        end
         
-        if bDoLLH || opts.bCollectGradient
+        if (bDoLLH || opts.bCollectGradient) && ~curMissing
             cholS       = cholcov(S);
             if bDoLLH
     %             [Sinv, lam] = utils.math.pinvAndEig(S, 1e-12);  % unstable if used in KF eqns (messed up!)
@@ -150,7 +161,7 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
     obj.infer.filter.utpar   = utpar;
 end
 
-function par = getParams(obj, stage, type)
+function par = internal_getParams(obj, stage, type)
     par = struct('control', false);
     [f,Df,h,Dh]    = obj.functionInterfaces;
     if stage == 1
@@ -180,5 +191,45 @@ function par = getParams(obj, stage, type)
             end
         else
             error('Unknown stage requested. Try 1=prediction or 2=update');
+    end
+end
+
+function [m, P, addlLLH] = internal_updateStepMissing(obj, parUpdate, m_minus, P_minus, u, y, fType2, utpar, bDoLlh)
+    if all(isnan(y))
+        m           = m_minus;
+        P           = P_minus;
+        addlLLH     = 0;
+        return
+    end
+    
+    % remove relevant indices
+    missIdx       = isnan(y);
+    Y             = y(~missIdx);
+    if obj.emiLinear
+        parUpdate.A = parUpdate.A(~missIdx,:);
+        parUpdate.Q = parUpdate.Q(~missIdx,~missIdx);
+    else
+        [~,~,h,Dh]    = obj.functionInterfaces;
+        % hack-y way to permit multiple statements in anonymous function
+        AREF          = @(A,B) subsref(A, struct('type', '()', 'subs', {B}));
+        parUpdate.f   = @(x, pars) AREF(h(x, pars), {find(~missIdx)});
+        parUpdate.Df  = @(x, pars) AREF(Dh(x, pars), {find(~missIdx), ':'});
+    end
+    
+    % perform standard update
+    [m_y, S, covxy]   = ds.utils.assumedDensityTform(parUpdate, m_minus, P_minus, u, fType2, utpar);
+    S                 = (S+S')/2;
+    K                 = covxy / S;
+    %K                 = utils.math.mmInverseChol(covxy, cholS);
+    deltaY            = Y - m_y;
+    m                 = m_minus + K*deltaY;
+    P                 = P_minus - K * S * K';
+
+    if bDoLlh
+        cholS       = cholcov(S);
+        d           = sum(~missIdx);
+        addlLLH     = utils.math.mvnlogpdfchol(deltaY', zeros(1,d), cholS);
+    else
+        addlLLH     = 0;
     end
 end
