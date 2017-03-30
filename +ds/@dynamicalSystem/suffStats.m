@@ -10,7 +10,7 @@ function s = suffStats(obj, opts)
 %  - C     = <x_t, x_{t-1}> 
 %  - B     = <y_t, x_t>          only for t in tau
 %  - D     = <y_t, y_t>          only for t in tau
-% (-SIGMEV = <x_t, x_t>          only for t in tau)
+% (-SIGMEV = <x_t, x_t>          only for t in tau  <- needed for R in presence of miss. vals)
 %
 %
 %  - XU    = <x_t, u_t>
@@ -86,6 +86,7 @@ Ty      = sum(yActv);
 s.B     = (y * mu(:,2:T+1)')./Ty;   % only using non all-NaNs: since 0 for all NaNs (see above), and T is last non NaN.
 s.D     = (y * y')./Ty;           % only using non all-NaNs
 
+
 % ------------- MISSING VALUES -------------------------------
 % remove x_t terms which are not active
 s.SIGMEV= s.SIGMA.*T;
@@ -98,17 +99,21 @@ for tt = find(yActv & ySemi)
     mask = isnan(obj.y(:,tt));
     Hu   = obj.par.H(mask,:);
     Ho   = obj.par.H(~mask,:);
+    Ru   = obj.par.R(mask, mask);
     Ro   = obj.par.R(~mask, ~mask);
     % D = < y_t, y_t >
-    adj  = (Hu * sigma{tt+1} * Hu')./Ty;
+    adj  = (Hu * sigma{tt+1} * Hu' + Ru)./Ty;
     s.D(mask,mask) = s.D(mask,mask) + adj;
     % B = < y_t, x_t >
     % THIS IS TOTALLY WRONG. NEED THE JOINT DISTRIBUTION OF y_t, x_t | y_{1:T}
     % WILL GIVE US MEAN
-    s.B  = s.B - (y(mask,tt) * mu(mask,tt+1)')./Ty;   % check
-    HoP  = Ho * sigma{tt+1};
-    adj  = ((Hu * HoP') / ( Ho * HoP' + Ro)) * (HoP * Hu');
-    s.B(mask, mask) = s.B(mask, mask) + adj;
+%     y_t        = y(:,tt);
+%     y_t(~mask) = 0;   % zero out the give (delta fn) elements of y as do not want to remove these.
+%     s.B        = s.B - (y_t* mu(:,tt+1)')./Ty;  
+%     HoP        = Ho * sigma{tt+1};
+%     adj        = ((Hu * HoP') / ( Ho * HoP' + Ro)) * (HoP * Hu');
+    adj        = (Hu * sigma{tt})./Ty;
+    s.B(mask, :) = s.B(mask, :) + adj;
 end
 
 
