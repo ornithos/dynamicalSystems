@@ -137,6 +137,10 @@ end
 
 s.infer = struct('mu', mu); s.infer.P = sigma; s.infer.G = G;   % hack to stop MATLAB making a struct array
 
+% additional single variable means
+s.Ymu    = sum(y, 2)./T;
+s.Umu    = sum(U(: , 2:T+1), 2)./T;
+s.Xmu    = sum(mu(:, 2:T+1), 2)./T;
 % purely for debugging EM
 % Q1 = zeros(obj.d.y);
 % Q2 = zeros(obj.d.y);

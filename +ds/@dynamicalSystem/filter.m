@@ -172,7 +172,7 @@ function par = internal_getParams(obj, stage, type)
                     par.B = obj.par.B;
                     par.control = true;
                 end
-                
+                par.bias = zeros(obj.d.x, 1); %obj.par.b;
             else
                 par.f  = f;
                 par.Df = Df;
@@ -184,6 +184,11 @@ function par = internal_getParams(obj, stage, type)
                 par.A = obj.par.H; % ok - A refers to the transition/emission matrix regardless of stage.
                 if obj.hasControl(2)
                     par.B = obj.par.C;   % ok - B refers to the linear control matrix regardless of stage.
+                end
+                if isempty(obj.par.c)
+                    par.bias = zeros(obj.d.y, 1);
+                else
+                    par.bias = obj.par.c;
                 end
             else
                 par.f  = h;

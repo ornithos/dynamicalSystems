@@ -65,7 +65,7 @@ classdef dynamicalSystem < handle
    properties
       opts, stack = cell(100,2),
       %  ___ Parameters ___
-       par = struct('x0',struct,'A',[],'H',[],'Q',[],'R',[], ...
+       par = struct('x0',struct,'A',[],'H',[],'Q',[],'R',[],'c', [], ...
                       'f',[],'Df',[],'h',[],'Dh',[], ...
                       'evoNLParams',struct,'emiNLParams',struct, ...
                       'B',[],'C',[], 'uu', [])
@@ -370,7 +370,30 @@ classdef dynamicalSystem < handle
             end
             obj.u = u;
       end
-      
+      function truncateTime(obj, T)
+          assert(utils.is.scalarint(T, 1), 'T must be a positive scalar integer');
+          assert(T <= obj.d.T, 'T is greater than the current max. time');
+          
+          obj.d.T      = T;
+          obj.u        = obj.u(:,1:T);
+          obj.y        = obj.y(:,1:T);
+          if ~isempty(obj.x);    obj.x    = obj.x(:,1:T); end
+          if ~isempty(obj.yhat); obj.yhat = obj.yhat(:,1:T); end
+          
+          obj.infer.filter.mu    = obj.infer.filter.mu(:,1:T);
+          obj.infer.filter.sigma = obj.infer.filter.sigma(1:T);
+          obj.infer.smooth.mu    = obj.infer.smooth.mu(:,1:T);
+          obj.infer.smooth.sigma = obj.infer.smooth.sigma(1:T);
+          obj.infer.smooth.G     = obj.infer.smooth.G(1:T-1);
+          for pp = 1:obj.stackptr
+              obj.stack{pp,1}.infer.filter.mu    = obj.stack{pp,1}.infer.filter.mu(:,1:T);
+              obj.stack{pp,1}.infer.filter.sigma = obj.stack{pp,1}.infer.filter.sigma(1:T);
+              obj.stack{pp,1}.infer.smooth.mu    = obj.stack{pp,1}.infer.smooth.mu(:,1:T);
+              obj.stack{pp,1}.infer.smooth.sigma = obj.stack{pp,1}.infer.smooth.sigma(1:T);
+              obj.stack{pp,1}.infer.smooth.G     = obj.stack{pp,1}.infer.smooth.G(1:T-1);
+              obj.stack{pp,1}.yhat               = obj.stack{pp,1}.yhat(:,1:T);
+          end
+      end
       % --- prototypes -------------------
       % inference / learning 
       [a,q]         = expLogJoint(obj, varargin); % Q(theta, theta_n) / free energy less entropy

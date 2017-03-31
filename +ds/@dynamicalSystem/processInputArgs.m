@@ -1,6 +1,6 @@
 function processInputArgs(obj, args)
 % dynamicalSystem(dim_x, dim_y, 'evolution', {A || f || []}, {Df, Q},
-   %                 'emission', {H || h || []}, {Dh, R},
+   %                 'emission', {H || h || []}, {Dh, R}, c, 
    %                 'data', {y || T},
    %                 'x0', {P0 || p0}, (m0),
    %                ('xtrue', x),
@@ -195,7 +195,7 @@ function [obj, tests] = internalProcessEvo(obj, arg)
     nargs         = numel(arg);
     tests         = {};
     obj.evoLinear = false;
-    %{A || f || []}, {Df, Q}
+    % {A || f || []}, {Df, Q}
     if isnumeric(arg{1})
         if isempty(arg{1})
             % unknown transition matrix
@@ -246,7 +246,7 @@ function [obj,tests] = internalProcessEmi(obj, arg)
     nargs         = numel(arg);
     obj.emiLinear = false;
     tests         = {};
-    %{H || h || []}, {Dh, R},
+    % {H || h || []}, {Dh, R},
     if isnumeric(arg{1})
         if isempty(arg{1})
             % unknown emission matrix
@@ -264,7 +264,17 @@ function [obj,tests] = internalProcessEmi(obj, arg)
     else
         error('Unknown argument type (%s) in Emission argument %d', class(arg{1}), 1);
     end
-    
+    % bias?
+    if isnumeric(arg{end})
+        if isempty(arg{end})
+            % unknown emission bias
+            obj.par.c = zeros(obj.d.y,1);
+            arg(end) = [];
+        elseif all(size(arg{end})==[obj.d.y, 1]);
+            obj.par.c = arg{end};
+            arg(end) = [];
+        end  
+    end
     exhaustNum = false;
     exhaustFn = false;
     for ii = 2:nargs
@@ -274,7 +284,7 @@ function [obj,tests] = internalProcessEmi(obj, arg)
             end
             assert(all(size(arg{ii})==[obj.d.y, obj.d.y]), 'matrix R is not conformable to dim(y)');
             obj.par.R      = arg{ii};
-            exhaustNum = true;
+            exhaustNum     = true;
         elseif isa(arg{ii}, 'function_handle') && ~exhaustFn
             obj.par.Dh = arg{ii};
             f = obj.par.Dh;
@@ -284,6 +294,9 @@ function [obj,tests] = internalProcessEmi(obj, arg)
             obj.par.emiNLParams = arg{ii};
             obj.emiNLhasParams = true;
         else
+            if isnumeric(arg{ii}) && isempty(obj.d.c)
+                warning('Cannot parse argument %d in emission. If it is intended to be bias, ensure it is conformable to y');
+            end
             error('Don''t know what to do with argument %d in Emission section', ii);
         end
     end

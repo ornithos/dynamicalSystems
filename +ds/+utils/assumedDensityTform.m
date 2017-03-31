@@ -15,12 +15,12 @@ function [m, P, C] = assumedDensityTform(pars, m, P, u, type, utpar)
     switch type
         case 0
             if isempty(u)
-                m = pars.A * m;
+                m = pars.A * m + pars.bias;
             else
-                m = pars.A * m + pars.B * u;
+                m = pars.A * m + pars.B * u + pars.bias;
             end
             C         = P * pars.A';
-            P         = pars.A * P * pars.A' + pars.Q;
+            P         = pars.A * C + pars.Q;
         case 1
             if isempty(u)
                 F         = pars.Df(m);

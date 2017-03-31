@@ -8,8 +8,9 @@ A MATLAB package for inference and learning in (discrete time) Linear Dynamical 
 * IONLDS (Georgatzis et al. <sup>2</sup>) learning implemented (requires optimisation toolbox).
 * Loglikelihood, expected log joint, and free energy available for debugging at any stage.
 * GUI available for comparing filter/smooth/learning in the 2D case.
+* Missing values -- both partial and full -- are handled in Linear case (Inference and Learning).
+* (NOT YET AVAILABLE) Missing values not fully derived and engineered in the nonlinear case.
 * (NOT YET AVAILABLE) Multiple time series can be learned simultaneously.
-* (NOT YET AVAILABLE) Inference and learning can be performed with missing values.
 * (NOT YET AVAILABLE) Particle Filter.
 
 #### Contents:
@@ -27,7 +28,10 @@ No installation is necessary. The package can be used by cloning the contents in
 ```matlab
 addpath /your-folder-here/dynamicalSystems
 ```
-It can be added permanently to the path by adding the statement to your `startup.m` file.
+It can be added permanently to the path by adding the statement to your `startup.m` file. 
+
+###### Dependencies
+`dynamicalSystems` depends on certain files in the `matlabUtils` package: this must also be downloaded and the top level folder added to path in the same way as above. Currently the MATLAB optimisation toolbox is required for learning in the IONLDS model. However, this can easily be replaced by a free toolbox if required. (The [minFunc](https://www.cs.ubc.ca/~schmidtm/Software/minFunc.html) project is an excellent choice.)
 
 ### Examples
 
@@ -112,11 +116,13 @@ where `y` is a `d x T` matrix - each observation is a column, meaning `T` observ
 ```matlab
 dynamicalSystem(..., 'data', T, ...
 ```
+Missing values may be specified as `NaN` where relevant (note the nonlinear case has not been worked through properly -- caveat emptor!).
+
 #### Prior (* required)
 ```matlab
 dynamicalSystem(..., 'x0', m0, P0, ...
 ```
-`x0` is the mean of the prior distribution of the latent space (if not given, this is assumed zero), and `P0` is the covariance matrix. `P0` must be specified, as it can have a considerable impact on the inference. If unknown, use an ormative prior *with respect to the expected scale of the latent space*. For brevity a scalar may be given instead of a full covariance matrix, which will be interpreted to mean a spherical covariance matrix with the given variance in each dimension. This is also true for the evolution and emission parameters.
+`x0` is the mean of the prior distribution of the latent space (if not given, this is assumed zero), and `P0` is the covariance matrix. `P0` must be specified, as it can have a considerable impact on the inference. If unknown, use a relatively uninformative prior *with respect to the expected scale of the latent space*. For brevity a scalar may be given instead of a full covariance matrix, which will be interpreted to mean a spherical covariance matrix with the given variance in each dimension. This is also true for the evolution and emission parameters.
 
 #### Actual latent state
 ```matlab
