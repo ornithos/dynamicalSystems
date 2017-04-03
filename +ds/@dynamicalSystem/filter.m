@@ -80,8 +80,8 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
     if obj.evoLinear; fType1 = 0; end
     if obj.emiLinear; fType2 = 0; end
     
-    parPredict      = internal_getParams(obj, 1, fType1);
-    parUpdate       = internal_getParams(obj, 2, fType2);
+    parPredict      = ds.internal.getParams(obj, 1, fType1);
+    parUpdate       = ds.internal.getParams(obj, 2, fType2);
     llh             = 0;
     d               = obj.d.y;
     T               = opts.T;
@@ -159,44 +159,6 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
     obj.infer.fType          = inpFtype;
     obj.infer.sType          = '';
     obj.infer.filter.utpar   = utpar;
-end
-
-function par = internal_getParams(obj, stage, type)
-    par = struct('control', false);
-    [f,Df,h,Dh]    = obj.functionInterfaces;
-    if stage == 1
-            par.Q = obj.par.Q;
-            if type == 0
-                par.A  = obj.par.A;
-                if obj.hasControl(1) && ~isempty(obj.par.B)
-                    par.B = obj.par.B;
-                    par.control = true;
-                end
-                par.bias = zeros(obj.d.x, 1); %obj.par.b;
-            else
-                par.f  = f;
-                par.Df = Df;
-            end
-            
-        elseif stage == 2
-            par.Q = obj.par.R; % ok - Q refers to the covariance matrix regardless of stage.
-            if type == 0
-                par.A = obj.par.H; % ok - A refers to the transition/emission matrix regardless of stage.
-                if obj.hasControl(2)
-                    par.B = obj.par.C;   % ok - B refers to the linear control matrix regardless of stage.
-                end
-                if isempty(obj.par.c)
-                    par.bias = zeros(obj.d.y, 1);
-                else
-                    par.bias = obj.par.c;
-                end
-            else
-                par.f  = h;
-                par.Df = Dh;
-            end
-        else
-            error('Unknown stage requested. Try 1=prediction or 2=update');
-    end
 end
 
 function [m, P, addlLLH] = internal_updateStepMissing(obj, parUpdate, m_minus, P_minus, u, y, fType2, utpar, bDoLlh)

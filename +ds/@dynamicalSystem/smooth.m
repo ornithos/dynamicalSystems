@@ -75,7 +75,7 @@ function smooth(obj, sType, utpar, opts)
     if obj.evoLinear; fType1 = 0; end
 %     if obj.emiLinear; fType2 = 0; end
     
-    parPredict   = getParams(obj, 1, fType1);
+    parPredict   = ds.internal.getParams(obj, 1, fType1);
     fMu          = obj.infer.filter.mu;
     fSigma       = obj.infer.filter.sigma;
     
@@ -155,37 +155,4 @@ function smooth(obj, sType, utpar, opts)
     obj.infer.smooth.utpar = utpar;
     
     obj.infer.sType        = inpStype;
-end
-
-function par = getParams(obj, stage, type)
-    par = struct('control', false);
-    [f,Df,h,Dh]    = obj.functionInterfaces;
-    if stage == 1
-            par.Q = obj.par.Q;
-            if type == 0
-                par.A  = obj.par.A;
-                if obj.hasControl(1) && ~isempty(obj.par.B)
-                    par.B = obj.par.B;
-                    par.control = true;
-                end
-                
-            else
-                par.f  = f;
-                par.Df = Df;
-            end
-            
-        elseif stage == 2
-            par.Q = obj.par.R;
-            if type == 0
-                par.A = obj.par.H;
-                if obj.hasControl(2)
-                    par.B = obj.par.C;
-                end
-            else
-                par.f  = h;
-                par.Df = Dh;
-            end
-        else
-            error('Unknown stage requested. Try 1=prediction or 2=update');
-    end
 end
