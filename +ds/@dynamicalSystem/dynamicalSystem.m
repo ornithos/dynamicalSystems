@@ -516,8 +516,10 @@ classdef dynamicalSystem < handle
             end
         end
         function out = doEmission(obj, input, u)
+            b       = zeros(obj.d.y, 1);
+            if ~isempty(obj.par.c); b = obj.par.c; end
             if obj.emiLinear
-                 out = obj.par.H * input;
+                 out = obj.par.H * input + b;
                  if obj.hasControl(2); out = out + obj.par.C * u; end
             else
                 [~,~,h,~]    = obj.functionInterfaces;

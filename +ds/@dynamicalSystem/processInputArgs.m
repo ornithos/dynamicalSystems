@@ -269,10 +269,10 @@ function [obj,tests] = internalProcessEmi(obj, arg)
         if isempty(arg{end})
             % unknown emission bias
             obj.par.c = zeros(obj.d.y,1);
-            arg(end) = [];
-        elseif all(size(arg{end})==[obj.d.y, 1]);
+            arg(end) = []; nargs = nargs - 1;
+        elseif all(size(arg{end})==[obj.d.y, 1])
             obj.par.c = arg{end};
-            arg(end) = [];
+            arg(end) = []; nargs = nargs -1;
         end  
     end
     exhaustNum = false;

@@ -139,9 +139,9 @@ end
 s.infer = struct('mu', mu); s.infer.P = sigma; s.infer.G = G;   % hack to stop MATLAB making a struct array
 
 yActvP1           = find(yActv)+1;
-s.emissions       = struct('Ymu',  mean(y(:,1:T), 2));
+s.emissions       = struct('Ymu',  mean(y(:,yActv), 2));
 s.emissions.Umu   = mean(U(:, yActvP1), 2);
-s.emissions.Xmu   = mean(mu(:, yActvP1));
+s.emissions.Xmu   = mean(mu(:, yActvP1), 2);
 s.emissions.XU    = (mu(:, yActvP1) * U(:, yActvP1)')./Ty;
 s.emissions.YU    = (y(:, yActv) * U(:,yActvP1)')./Ty; 
 s.emissions.UU    = (U(:, yActv) * U(:,yActv)')./Ty;    % only to T-1 (see graphical model)

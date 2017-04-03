@@ -188,7 +188,7 @@ function [m, P, addlLLH] = internal_updateStepMissing(obj, parUpdate, m_minus, P
     S                 = (S+S')/2;
     K                 = covxy / S;
     %K                 = utils.math.mmInverseChol(covxy, cholS);
-    deltaY            = Y - m_y;
+    deltaY            = Y - m_y(~missIdx);
     m                 = m_minus + K*deltaY;
     P                 = P_minus - K * S * K';
 
