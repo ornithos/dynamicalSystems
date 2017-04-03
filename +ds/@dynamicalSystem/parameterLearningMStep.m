@@ -109,7 +109,34 @@ function parameterLearningMStep(obj, updateOnly, opts)
                 % ? possible projection constraints
                 if numel(opts.diagAconstraints) == 2
                     con = sort(opts.diagAconstraints);
-                    a   = max(min(a, con(2)), con(1));
+                    % if violating, must solve as linearly constrained least squares
+                    if any(a>con(2)) || any(a<con(1))
+                        lb            = repmat(con(1), obj.d.x, 1); ub = repmat(con(2), obj.d.x, 1);
+                        a             = min(ub, max(a, lb));
+                        % ------------ EXACT MINIMISATION -----------------
+%                         lsqopts       = optimoptions('fmincon', 'Display', 'none');
+%                         minfn         = @(x) -2*trace(psi*diag(x)*tmp) + trace(psi*diag(x)*s.PHI*diag(x));
+%                         [aOpt,~,xfl]  = fmincon(minfn,a,[],[],[],[],lb,ub,[],lsqopts);
+%                         if xfl < 0; a = diag(obj.par.A); end
+                        % -------------------------------------------------
+                        % Greedy active-set heuristic -- much faster.. haven't encountered any problems
+                        % yet, but may fail occasionally. --> if worried use the exact version above.
+                        afix = NaN(size(a));
+                        while numel(a) > 0 && (any(a < lb) || any(a > ub))
+                            cur                = find(isnan(afix));
+                            aViolLB            = a < lb;
+                            afix(cur(aViolLB)) = lb(aViolLB);
+                            v                  = v - M(:,cur(aViolLB)) * lb(aViolLB);
+                            aViolUB            = a > ub;
+                            afix(cur(aViolUB)) = ub(aViolUB);
+                            v                  = v - M(:,cur(aViolUB)) * ub(aViolUB);
+                            M(:,cur(aViolLB | aViolUB)) = [];
+                            a                  = M \ v;
+                        end
+                        afix(isnan(afix))  = a;
+                        a                  = afix;
+%                         fprintf('normdiff aOpt to aActive = %.7f\n', norm(aOpt - a));
+                    end
                 elseif ~isempty(opts.diagAconstraints)
                     error(isempty(opts.diagAconstraints), 'diagAconstraints must be a 2 element vector or empty');
                 end
@@ -153,20 +180,21 @@ function parameterLearningMStep(obj, updateOnly, opts)
     % ______________ H (And C) updates ___________________________________
     matchesHC = ismember({'H','C'}, updateOnly);
     if any(matchesHC)
+        s2 = s.emissions;
         if obj.hasControl(2)
-            if any(any(isnan(obj.y))); warning('NaNs not handled properly in emission learning'); end
+            if any(any(isnan(obj.y))); warning('NaNs not tested properly in emission learning'); end
             % **** MASSIVE WARNING HERE: NANs NOT HANDLED YET IN THIS ****
             if all(matchesHC)
-                HC          = [s.B, s.XU] / [s.SIGMA, s.YU; s.YU', s.UU];
+                HC          = [s.B, s2.XU] / [s2.SIGMA, s2.YU; s2.YU', s2.UU];
                 obj.par.H   = HC(:, 1:obj.d.x);
                 obj.par.C   = HC(:, obj.d.x+1:end);
             elseif matchesHC(1)
-                obj.par.H   = (s.B  -  obj.par.C * s.XU') / s.SIGMA;
+                obj.par.H   = (s.B  -  obj.par.C * s2.XU') / s2.SIGMA;
             elseif matchesHC(2)
-                obj.par.C   = (s.YU -  obj.par.H * s.XU)  / s.UU;
+                obj.par.C   = (s2.YU -  obj.par.H * s2.XU)  / s2.UU;
             end
         elseif matchesHC(1)
-            obj.par.H   = s.B / s.SIGMEV;
+            obj.par.H   = s.B / s2.SIGMA;
         end
     end
     
@@ -176,16 +204,17 @@ function parameterLearningMStep(obj, updateOnly, opts)
     % ______________ R updates ___________________________________________
     if any(strcmpi(updateOnly, 'R'))
         % original R update (without inputs)
+        s2          = s.emissions;
         H           = obj.par.H;
-        R           = s.D - H*s.B' - s.B*H' + H*s.SIGMEV*H';
+        R           = s.D - H*s.B' - s.B*H' + H*s2.SIGMA*H';
         
         if obj.hasControl(2)
-            if any(any(isnan(obj.y))); warning('NaNs not handled properly in emission learning'); end
+            if any(any(isnan(obj.y))); warning('NaNs not tested properly in emission learning'); end
             % --- additions to covariance from control inputs ----
             C       = obj.par.C;
-            Cuy     = C * s.YU';
-            Cum_H   = C * s.XU' * H';
-            R       = R + C*s.UU*C' - Cuy - Cuy' + Cum_H + Cum_H';
+            Cuy     = C * s2.YU';
+            Cum_H   = C * s2.XU' * H';
+            R       = R + C*s2.UU*C' - Cuy - Cuy' + Cum_H + Cum_H';
         end
 
         % numerical imprecision (hopefully!) on symmetry

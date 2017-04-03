@@ -10,7 +10,7 @@ function s = suffStats(obj, opts)
 %  - C     = <x_t, x_{t-1}> 
 %  - B     = <y_t, x_t>          only for t in tau
 %  - D     = <y_t, y_t>          only for t in tau
-% (-SIGMEV = <x_t, x_t>          only for t in tau  <- needed for R in presence of miss. vals)
+% (-SIGMAemi = <x_t, x_t>        only for t in tau  <- needed for R in presence of miss. vals)
 %
 %
 %  - XU    = <x_t, u_t>
@@ -89,11 +89,12 @@ s.D     = (y * y')./Ty;           % only using non all-NaNs
 
 % ------------- MISSING VALUES -------------------------------
 % remove x_t terms which are not active
-s.SIGMEV= s.SIGMA.*T;
+SIGMAemi = s.SIGMA.*T;
 for tt = find(~yActv)
-    s.SIGMEV = s.SIGMEV - sigma{tt+1} - mu(:,tt+1) * mu(:,tt+1)';   % + 1 because of x0
+    SIGMAemi = SIGMAemi - sigma{tt+1} - mu(:,tt+1) * mu(:,tt+1)';   % + 1 because of x0
 end
-s.SIGMEV = s.SIGMEV./Ty;
+SIGMAemi = SIGMAemi./Ty;
+
 % add covariance into y where relevant
 for tt = find(yActv & ySemi)
     mask = isnan(obj.y(:,tt));
@@ -137,10 +138,15 @@ end
 
 s.infer = struct('mu', mu); s.infer.P = sigma; s.infer.G = G;   % hack to stop MATLAB making a struct array
 
-% additional single variable means
-s.Ymu    = sum(y, 2)./T;
-s.Umu    = sum(U(: , 2:T+1), 2)./T;
-s.Xmu    = sum(mu(:, 2:T+1), 2)./T;
+yActvP1           = find(yActiv)+1;
+s.emissions       = struct('Ymu',  mean(y(:,1:T), 2);
+s.emissions.Umu   = mean(U(:, yActvP1), 2);
+s.emissions.Xmu   = mean(mu(:, yActvP1));
+s.emissions.XU    = (mu(:, yActvP1) * U(:, yActvP1)')./Ty;
+s.emissions.YU    = (y(:, yActv) * U(:,yActvP1)')./Ty; 
+s.emissions.UU    = (U(:, yActv) * U(:,yActv)')./Ty;    % only to T-1 (see graphical model)
+s.emissions.SIGMA = SIGMAemi;
+
 % purely for debugging EM
 % Q1 = zeros(obj.d.y);
 % Q2 = zeros(obj.d.y);
