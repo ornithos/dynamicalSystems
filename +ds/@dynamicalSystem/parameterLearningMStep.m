@@ -181,21 +181,82 @@ function parameterLearningMStep(obj, updateOnly, opts)
     matchesHC = ismember({'H','C'}, updateOnly);
     if any(matchesHC)
         s2 = s.emissions;
-        if obj.hasControl(2)
-            if any(any(isnan(obj.y))); warning('NaNs not tested properly in emission learning'); end
-            % **** MASSIVE WARNING HERE: NANs NOT HANDLED YET IN THIS ****
-            if all(matchesHC)
-                HC          = [s.B, s2.XU] / [s2.SIGMA, s2.YU; s2.YU', s2.UU];
-                obj.par.H   = HC(:, 1:obj.d.x);
-                obj.par.C   = HC(:, obj.d.x+1:end);
-            elseif matchesHC(1)
-                obj.par.H   = (s.B  -  obj.par.C * s2.XU') / s2.SIGMA;
-            elseif matchesHC(2)
-                obj.par.C   = (s2.YU -  obj.par.H * s2.XU)  / s2.UU;
+        
+        HCopts = struct;
+        HCopts.H       = matchesHC(1);
+        HCopts.C       = matchesHC(2) && obj.hasControl(2);  % clearly only do C update if control exists.
+        HCopts.bias    = ~isempty(obj.par.c);
+        HCopts.control = obj.hasControl(2);
+        
+        % find "numerator" and "denominator" and calculate regression
+        if HCopts.H
+            if HCopts.C
+                if HCopts.bias
+                    % H && C && bias 
+                    numer     = [s.B, s.YU, s2.Ymu];
+                    denom     = [s2.SIGMA, s2.XU, s2.Xmu;   s2.XU', s2.UU, s2.Umu;   s2.Xmu', s2.Umu', 1];
+                    result    = numer / denom;
+                    obj.par.H = result(:, 1:obj.d.x);
+                    obj.par.C = result(:, obj.d.x+1:end-1);
+                    obj.par.c = result(:, end);
+                else
+                    % H && C && ____
+                    numer     = [s.B, s.YU];
+                    denom     = [s2.SIGMA, s2.XU;   s2.XU', s2.UU];
+                    result    = numer / denom;
+                    obj.par.H = result(:, 1:obj.d.x);
+                    obj.par.C = result(:, obj.d.x+1:end-1);
+                end
+            else
+                if HCopts.bias
+                    if HCopts.control
+                        % H && _ && bias && control
+                        numer     = [(s.B - obj.par.C * s2.XU'), s2.Ymu];
+                        denom     = [s2.SIGMA, s2.Xmu;  s2.Xmu', 1];
+                        result    = numer / denom;
+                        obj.par.H = result(:, 1:obj.d.x);
+                        obj.par.c = result(:, end);
+                    else
+                        % H && _ && bias && ______
+                        numer     = [s.B, s2.Ymu];
+                        denom     = [s2.SIGMA, s2.Xmu;  s2.Xmu', 1];
+                        result    = numer / denom;
+                        obj.par.H = result(:, 1:obj.d.x);
+                        obj.par.c = result(:, end);
+                    end
+                else
+                    if HCopts.control
+                        % H && _ && ____ && control
+                        numer     = s.B - obj.par.C * s2.XU';
+                        denom     = s2.SIGMA;
+                        result    = numer / denom;
+                        obj.par.H = result(:, 1:obj.d.x);
+                    else
+                        % H && _ && ____ && ______
+                        numer     = s.B;
+                        denom     = s2.SIGMA;
+                        result    = numer / denom;
+                        obj.par.H = result(:, 1:obj.d.x);
+                    end
+                end
             end
-        elseif matchesHC(1)
-            obj.par.H   = s.B / s2.SIGMA;
+        else
+                if HCopts.bias
+                    % H && C && bias 
+                    numer     = [(s.YU - obj.par.H * s2.XU), s2.Ymu];
+                    denom     = [s2.UU, s2.Umu;   s2.Umu', 1];
+                    result    = numer / denom;
+                    obj.par.C = result(:, 1:obj.d.u);
+                    obj.par.c = result(:, end);
+                else
+                    % H && C && ____
+                    numer     = s.YU - obj.par.H * s2.XU;
+                    denom     = s2.UU;
+                    result    = numer / denom;
+                    obj.par.C = result(:, 1:obj.d.u);
+                end
         end
+        
     end
     
     % debug message
@@ -215,8 +276,19 @@ function parameterLearningMStep(obj, updateOnly, opts)
             Cuy     = C * s2.YU';
             Cum_H   = C * s2.XU' * H';
             R       = R + C*s2.UU*C' - Cuy - Cuy' + Cum_H + Cum_H';
+            if ~isempty(obj.par.c)
+                % bias exists && control exists.
+                tmp = obj.par.c*s2.Umu'*obj.par.C';
+                R   = R + (-tmp - tmp')./s2.Ty;
+            end
         end
 
+        if ~isempty(obj.par.c)
+            % bias exists
+            tmp = obj.par.c*(s2.Ymu - obj.par.H * s2.Xmu);
+            R   = R + (-tmp - tmp' + obj.par.c*obj.par.c')./s2.Ty;
+        end
+        
         % numerical imprecision (hopefully!) on symmetry
         obj.par.R   = (R + R')./2 + eps*eye(obj.d.y);
         
