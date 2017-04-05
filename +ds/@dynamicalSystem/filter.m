@@ -172,9 +172,11 @@ function [m, P, addlLLH] = internal_updateStepMissing(obj, parUpdate, m_minus, P
     % remove relevant indices
     missIdx       = isnan(y);
     Y             = y(~missIdx);
+    
+    parUpdate.bias=parUpdate.bias(~missIdx);
     if obj.emiLinear
-        parUpdate.A = parUpdate.A(~missIdx,:);
-        parUpdate.Q = parUpdate.Q(~missIdx,~missIdx);
+        parUpdate.A = parUpdate.A(~missIdx,:);            % actually H
+        parUpdate.Q = parUpdate.Q(~missIdx,~missIdx);     % actually R
     else
         [~,~,h,Dh]    = obj.functionInterfaces;
         % hack-y way to permit multiple statements in anonymous function
@@ -188,7 +190,7 @@ function [m, P, addlLLH] = internal_updateStepMissing(obj, parUpdate, m_minus, P
     S                 = (S+S')/2;
     K                 = covxy / S;
     %K                 = utils.math.mmInverseChol(covxy, cholS);
-    deltaY            = Y - m_y(~missIdx);
+    deltaY            = Y - m_y;
     m                 = m_minus + K*deltaY;
     P                 = P_minus - K * S * K';
 

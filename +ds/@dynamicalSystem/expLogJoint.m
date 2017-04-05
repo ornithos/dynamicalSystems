@@ -24,14 +24,7 @@ function [a, q] = expLogJoint(obj, varargin)
     %
     
     optsDefault = struct('freeEnergy', false, 'recalcPosterior', false);
-    opts        = struct;
-    narargin = numel(varargin);
-    assert(mod(narargin,2)==0, 'arguments to expLogJoint must come in name-value pairs');
-    for kk = 0:(narargin/2-1)
-        assert(ischar(varargin{2*kk+1}), 'odd numbered arguments must be names (character strings)');
-        opts.(varargin{2*kk+1}) = varargin{2*kk+2};
-    end
-    opts        = utils.base.parse_argumentlist(opts, optsDefault);
+    opts        = utils.base.processVarargin(varargin, optsDefault);
     ssopts      = struct('bIgnoreHash', ~opts.recalcPosterior);
     
     %% 

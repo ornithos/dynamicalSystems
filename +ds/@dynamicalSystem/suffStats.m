@@ -97,13 +97,13 @@ SIGMAemi = SIGMAemi./Ty;
 
 % add covariance into y where relevant
 for tt = find(yActv & ySemi)
-    mask = isnan(obj.y(:,tt));
-    Hu   = obj.par.H(mask,:);
-    Ho   = obj.par.H(~mask,:);
-    Ru   = obj.par.R(mask, mask);
-    Ro   = obj.par.R(~mask, ~mask);
+    mask           = isnan(obj.y(:,tt));
+    Hu             = obj.par.H(mask ,  :   );
+    Ho             = obj.par.H(~mask,  :   );
+    Ru             = obj.par.R(mask ,  mask);
+    Ro             = obj.par.R(~mask, ~mask);
     % D = < y_t, y_t >
-    adj  = (Hu * sigma{tt+1} * Hu' + Ru)./Ty;
+    adj            = (Hu * sigma{tt+1} * Hu' + Ru)./Ty;
     s.D(mask,mask) = s.D(mask,mask) + adj;
     % B = < y_t, x_t >
     % THIS IS TOTALLY WRONG. NEED THE JOINT DISTRIBUTION OF y_t, x_t | y_{1:T}
@@ -113,7 +113,7 @@ for tt = find(yActv & ySemi)
 %     s.B        = s.B - (y_t* mu(:,tt+1)')./Ty;  
 %     HoP        = Ho * sigma{tt+1};
 %     adj        = ((Hu * HoP') / ( Ho * HoP' + Ro)) * (HoP * Hu');
-    adj        = (Hu * sigma{tt})./Ty;
+    adj          = (Hu * sigma{tt+1})./Ty;
     s.B(mask, :) = s.B(mask, :) + adj;
 end
 

@@ -3,10 +3,11 @@ function [llh, ii] = parameterLearningEM(obj, opts)
 if nargin < 2 || isempty(opts); opts = struct; end
 optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL', 5, ...
                         'verbose', true, 'dbg', false, 'validation', false, ...
-                        'multistep', 4, 'diagA', true, 'diagAconstraints', [-1,1], ...
-                        'diagQ', false, 'diagR', false, ...
+                        'multistep', 4, 'diagA', false, 'diagQ', false, 'diagR', false, ...
+                        'diagAconstraints', [-1, 1], 'fixBias2', false, ...
                         'sampleStability', 1, 'stableVerbose', false, ...
-                        'optimType', 'analytic', 'gamma', false, 'strictNegativeCheck', false);
+                        'annealingSchedule', Inf, 'annealingIter', 10, ...
+                        'annealingMin', 1e-6, 'strictNegativeCheck', false);
 optsDefault     = utils.base.parse_argumentlist(obj.opts, optsDefault, false);      % bring in global opts
 opts            = utils.base.parse_argumentlist(opts, optsDefault, false);          % add user specified opts.
 
@@ -20,6 +21,13 @@ if opts.ssid
         fprintf('(%s) Initialising using subspace identification...\n', datestr(now, 'HH:MM:SS'));
     end
     obj.ssid(opts.ssidL);
+    ssidrescale = max(abs(eig(obj.par.A)));
+    ssidrescale = max(ssidrescale, 0);    % ensure stable trans matrix (hack!)
+    obj.par.A   = obj.par.A ./ ssidrescale;
+    obj.par.H   = obj.par.H .* ssidrescale;
+    
+    obj.filter;
+    obj.smooth;
 else
     var_y   = var(obj.y);
     if isempty(obj.par.A)
@@ -40,12 +48,25 @@ if opts.validation
     obj.validationInference;  % ensure able to do inference
 end
 
+% ________ Determine annealing schedule __________________________________
+% Perform Deterministic Annealing (cf. Ueda, Nakano - Deterministic
+% Annealing Variant of the EM Algorithm, NIPS 1995)
+% beta denotes the inverse temperature: 0 = hot, 1 = cooled.
+assert(opts.annealingSchedule > 0, 'annealing schedule must increase by strictly positive amount');
+assert(opts.annealingMin > 0 && opts.annealingMin <= 1, 'annealing minimum beta must be in (0,1]');
+da.invbetas     = (linspace(1, 0, max(1,1./opts.annealingSchedule)));
+da.invbetas     = exp(-da.invbetas.*log(opts.annealingMin));
+da.invbetas     = round(da.invbetas,5);
+da.n            = numel(da.invbetas);
+da.pointer      = 1;
+da.cur          = da.invbetas(1);  % may not be min if annealingSchedule is infinite.
+da.curIter      = 0;
 
 % ________ Get names of parameters which have been 'fixed' _______________
 % get options for (1) Filtering and (2) M-step
 fOpts      = struct('bDoValidation', false, 'bIgnoreHash', true);
 mstepOpts  = struct('verbose', opts.dbg, 'diagQ', opts.diagQ, 'diagR', opts.diagR, ...
-                'diagA', opts.diagA, 'diagAconstraints', opts.diagAconstraints);
+                 'diagA', opts.diagA, 'diagAconstraints', opts.diagAconstraints, 'fixBias2', opts.fixBias2);
 optFds     = fieldnames(opts);
 for oname = optFds   % fixA, fixQ, fix....
     if strcmp(oname(1:3), 'fix')

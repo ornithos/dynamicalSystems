@@ -112,30 +112,28 @@ function parameterLearningMStep(obj, updateOnly, opts)
                     con = sort(opts.diagAconstraints);
                     % if violating, must solve as linearly constrained least squares
                     if any(a>con(2)) || any(a<con(1))
-                        lb            = repmat(con(1), obj.d.x, 1); ub = repmat(con(2), obj.d.x, 1);
-                        a             = min(ub, max(a, lb));
                         % ------------ EXACT MINIMISATION -----------------
+%                         a             = min(ub, max(a, lb));
 %                         lsqopts       = optimoptions('fmincon', 'Display', 'none');
 %                         minfn         = @(x) -2*trace(psi*diag(x)*tmp) + trace(psi*diag(x)*s.PHI*diag(x));
 %                         [aOpt,~,xfl]  = fmincon(minfn,a,[],[],[],[],lb,ub,[],lsqopts);
 %                         if xfl < 0; a = diag(obj.par.A); end
                         % -------------------------------------------------
-                        % Greedy active-set heuristic -- much faster.. haven't encountered any problems
-                        % yet, but may fail occasionally. --> if worried use the exact version above.
-                        afix = NaN(size(a));
-                        while numel(a) > 0 && (any(a < lb) || any(a > ub))
-                            cur                = find(isnan(afix));
-                            aViolLB            = a < lb;
-                            afix(cur(aViolLB)) = lb(aViolLB);
-                            v                  = v - M(:,cur(aViolLB)) * lb(aViolLB);
-                            aViolUB            = a > ub;
-                            afix(cur(aViolUB)) = ub(aViolUB);
-                            v                  = v - M(:,cur(aViolUB)) * ub(aViolUB);
-                            M(:,cur(aViolLB | aViolUB)) = [];
-                            a                  = M \ v;
+                        % Greedy active-set heuristic -- much faster...
+                        % but sometimes fails. First use projection:
+                        a             = min(con(2), max(con(1), a));
+                        objfn         = @(x) 2*trace(psi*diag(x)*tmp) - trace(psi*diag(x)*s.PHI*diag(x));
+                        curAOpt       = objfn(diag(obj.par.A));
+                        
+                        % solve constrained problem (QP)
+                        if objfn(a) < curAOpt
+                            lb            = repmat(con(1), obj.d.x, 1); ub = repmat(con(2), obj.d.x, 1);
+                            qpopts        = optimoptions('quadprog', 'Display', 'none');
+                            [a,~,xfl]     = quadprog(0.5*(M+M'), -v, [],[],[],[],lb,ub,a,qpopts);  % for these kinds of small problems, overhead(qp) > solve(qp)
+                            if xfl < 0 ||  (objfn(a) < curAOpt)
+                                a = diag(obj.par.A); 
+                            end
                         end
-                        afix(isnan(afix))  = a;
-                        a                  = afix;
 %                         fprintf('normdiff aOpt to aActive = %.7f\n', norm(aOpt - a));
                     end
                 elseif ~isempty(opts.diagAconstraints)
@@ -308,6 +306,11 @@ function parameterLearningMStep(obj, updateOnly, opts)
         
         % numerical imprecision (hopefully!) on symmetry
         obj.par.R   = (R + R')./2 + eps*eye(obj.d.y);
+%         Acon = zeros(2,3);
+%         Acon(1,1) = -1; Acon(2,3) = -1;
+%         Acon = zeros(3,6);
+%         Acon(1,1) = -1; Acon(2,3) = -1; Acon(3,6) = -1;
+%         x0 = chol(obj.par.R); RRR = fmincon(@(x) ds.tmpllhcovfn(obj, x), x0([1,4:5,7:9]), Acon, ones(3,1)*1e-6);
         
         if opts.diagR
             obj.par.R = diag(diag(obj.par.R));

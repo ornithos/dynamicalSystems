@@ -29,6 +29,8 @@ function [y, covY] = impute_y(obj, varargin)
     optsDefault.smooth    = false;
     optsDefault.variance  = false;
     optsDefault.bIgnoreHash = false;   % do not check inference
+    optsDefault.sample    = false;
+    
     opts                  = utils.base.processVarargin(varargin, optsDefault);
     if ~(opts.filter || opts.smooth)
         opts.smooth = true;             % default
@@ -43,16 +45,28 @@ function [y, covY] = impute_y(obj, varargin)
     if opts.filter
         if ~opts.bIgnoreHash; obj.ensureInference('IMPUTE', 'filter'); end
         xhat = obj.infer.filter.mu;
+        % (NOTE: UNLIKE in SUFFSTATS.m, THIS IS tt NOT tt + 1, AS NO X0)
+        P    = obj.infer.filter.sigma;
     else
         if ~opts.bIgnoreHash; obj.ensureInference('IMPUTE', 'smooth'); end
         xhat = obj.infer.smooth.mu;
+        % (NOTE: UNLIKE in SUFFSTATS.m, THIS IS tt NOT tt + 1, AS NO X0)
+        P    = obj.infer.smooth.sigma;
     end
+    
+    % precompute cholesky if need samples
+    cholR      = chol(obj.par.R);
     
     % impute missing values
     for tt = find(anyMissing)
         u_t     = [];
-        if any(obj.hasControl); u_t = obj.u(:,tt); end
-        yhat_tt  = obj.doEmission(xhat(:,tt), u_t);
+        if obj.hasControl(2); u_t = obj.u(:,tt); end
+        if ~opts.sample
+            yhat_tt  = obj.doEmission(xhat(:,tt), u_t);
+        else
+            tmpx     = xhat(:,tt) + chol(P{tt})' * randn(obj.d.x, 1);
+            yhat_tt  = obj.doEmission(tmpx, u_t) + cholR' * randn(obj.d.y, 1);
+        end
         mask     = missing(:,tt);
         y(mask,tt)  = yhat_tt(mask);
     end
@@ -60,14 +74,6 @@ function [y, covY] = impute_y(obj, varargin)
     % get covariance
     if opts.variance
         d    = obj.d.y;
-        
-        % get posterior covariance
-        % (NOTE: UNLIKE in SUFFSTATS.m, THIS IS tt NOT tt + 1, AS NO X0)
-        if opts.filter
-            P    = obj.infer.filter.sigma;
-        else
-            P    = obj.infer.smooth.sigma;
-        end
         
         covY = repmat({zeros(d)}, obj.d.T,1);
         for tt = find(anyMissing)

@@ -1,4 +1,4 @@
-function smooth(obj, sType, utpar, opts)
+function smooth(obj, sType, utpar, varargin)
     % smooth(obj, bDoLLH, bDoValidation, utpar)
     % Dynamical System Smoothing for general dynamics as described in eg. 
     % Särkkä (2013). If the transition dynamics are non-linear, the
@@ -25,9 +25,6 @@ function smooth(obj, sType, utpar, opts)
     
     %% Argument defaults and validation
     
-    if nargin < 4 || isempty(opts)
-        opts = struct;
-    end
     if nargin < 3 || isempty(utpar)
         utpar = struct;
     end
@@ -40,8 +37,8 @@ function smooth(obj, sType, utpar, opts)
         end
     end
     
-    optsDefault  = struct('bDoValidation', true, 'bIgnoreHash', false);
-    opts         = utils.struct.structCoalesce(opts, optsDefault);
+    optsDefault  = struct('bDoValidation', true, 'bIgnoreHash', false, 'forceFilter', false, 'doLlh', false);
+    opts         = utils.base.processVarargin(varargin, optsDefault);
     utparDefault = struct('alpha', 1e-3, 'beta', 2, 'kappa', 0);
     utpar        = utils.struct.structCoalesce(utpar, utparDefault);
     
@@ -60,7 +57,9 @@ function smooth(obj, sType, utpar, opts)
     end
     
     % Check for existence of Filter
-    if ~opts.bIgnoreHash && obj.parametersChanged
+    if opts.forceFilter || opts.doLlh
+        obj.filter(inpStype, opts.doLlh, utpar, opts);
+    elseif ~opts.bIgnoreHash && obj.parametersChanged
         if obj.opts.verbose; fprintf('Filter not run or parameters changed. Rerunning filter...\n'); end
         obj.filter(inpStype, false, utpar, opts);
     end

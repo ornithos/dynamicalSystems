@@ -7,7 +7,8 @@ optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL'
                         'diagAconstraints', [-1, 1], 'fixBias2', false, ...
                         'sampleStability', 1, 'stableVerbose', false, ...
                         'annealingSchedule', Inf, 'annealingIter', 10, ...
-                        'annealingMin', 1e-6, 'strictNegativeCheck', false);
+                        'annealingMin', 1e-6, 'strictNegativeCheck', false, ...
+                        'filterType', 'linear', 'utpar', struct, 'fixX0', true);
 optsDefault     = utils.base.parse_argumentlist(obj.opts, optsDefault, false);      % bring in global opts
 opts            = utils.base.parse_argumentlist(opts, optsDefault, false);          % add user specified opts.
 
@@ -70,7 +71,7 @@ da.curIter      = 0;
 
 % ________ Get names of parameters which have been 'fixed' _______________
 % get options for Filtering and for M-step
-fOpts      = struct('bDoValidation', false, 'bIgnoreHash', true);
+fOpts      = struct('bDoValidation', false, 'bIgnoreHash', true, 'forceFilter', true, 'doLlh', true);
 mstepOpts  = struct('verbose', opts.dbg, 'diagQ', opts.diagQ, 'diagR', opts.diagR, ...
                  'diagA', opts.diagA, 'diagAconstraints', opts.diagAconstraints, 'fixBias2', opts.fixBias2);
 optFds     = fieldnames(opts);
@@ -115,16 +116,16 @@ if opts.diagQ; obj.par.Q = diag(diag(obj.par.Q)); end
 if opts.diagR; obj.par.R = diag(diag(obj.par.R)); end
 
 % Initialise dbg struct in case we need it..
-dbgLLH = struct('A',[0,0],'Q',[0,0],'H',[0,0],'R',[0,-Inf]);
+dbgLLH = struct('A',[0,0],'Q',[0,0],'H',[0,0],'R',[0,0],'x0',[0, -Inf]);
+bestpar    = cell(1,3);   bestpar{2} = -Inf;
 
 %% MAIN EM LOOP
 for ii = 1:opts.maxiter
     % E-Step!
-    obj.filter('Kalman', true, [], fOpts);
-    obj.smooth('Linear', [], fOpts);
+    obj.smooth(opts.filterType, opts.utpar, fOpts);
     
     % llh calc
-    dbgLLH.R  = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh];
+    dbgLLH.x0  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
     llh(ii+1) = obj.infer.llh;
     delta     = llh(ii+1) - llh(ii);
     
@@ -147,8 +148,8 @@ for ii = 1:opts.maxiter
         if multiStep == 1
             % basically things have gone really wrong by here..
             iterBar.clearConsole;
-            fprintf('min eigv Q = %.3e', min(eig(obj.par.Q)));
-            fprintf(', min eigv R = %.3e\n', min(eig(obj.par.R)));
+%             fprintf('min eigv Q = %.3e', min(eig(obj.par.Q)));
+%             fprintf(', min eigv R = %.3e\n', min(eig(obj.par.R)));
             keyboard
         elseif opts.sampleStability > 1
             % only periodically sampling stability of A leads to jumps..
@@ -156,6 +157,13 @@ for ii = 1:opts.maxiter
         else
             % Doing ECM is not *guaranteed* to increase the llh on each step
             multiStep = multiStep ./ 2;
+        end
+    else
+        % keep track of best llh found so far (no guarantees of monotonicity
+        if llh(ii+1) > bestpar{2}
+            bestpar{1} = obj.par;
+            bestpar{2} = llh(ii+1);
+            bestpar{3} = ii;
         end
     end
     
@@ -186,7 +194,12 @@ for ii = 1:opts.maxiter
     % ____ Canonical parameters ___________________________________________
     prevA         = obj.par.A;
 %     prevLLH       = obj.logLikelihood;
-    obj.parameterLearningMStep({'A', 'B'}, mstepOpts);
+
+    % randomly update either A or B first
+    for ss = randperm(2)
+        if ss == 1;                      obj.parameterLearningMStep({'A'}, mstepOpts); end
+        if ss == 2 && obj.hasControl(1); obj.parameterLearningMStep({'B'}, mstepOpts); end
+    end
     
     % Check for stability of A: significant problems when A blows up.
     prevStepWasConstrained = false;
@@ -219,27 +232,36 @@ for ii = 1:opts.maxiter
             obj.parameterLearningMStep({'Q','H','R'}, mstepOpts);
         case 2
             obj.parameterLearningMStep({'Q'}, mstepOpts);
-            obj.filter('Kalman', true, [], fOpts);
-            obj.smooth('Linear', [], fOpts);
-            obj.parameterLearningMStep({'H','R'}, mstepOpts);
+                obj.smooth(opts.filterType, opts.utpar, fOpts);
+                obj.parameterLearningMStep({'H','R'}, mstepOpts);
         case 1
-            obj.filter('Kalman', true, [], fOpts);
-            obj.smooth('Linear', [], fOpts);
+                obj.smooth(opts.filterType, opts.utpar, fOpts);
             dbgLLH.A  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
             
             obj.parameterLearningMStep({'Q'}, mstepOpts);
-            obj.filter('Kalman', true, [], fOpts);
-            obj.smooth('Linear', [], fOpts);
-            dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh];
+                obj.smooth(opts.filterType, opts.utpar, fOpts);
+                dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh];
             
             obj.parameterLearningMStep({'H'}, mstepOpts);
-            obj.filter('Kalman', true, [], fOpts);
-            obj.smooth('Linear', [], fOpts);
-            dbgLLH.H  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh];
+                obj.smooth(opts.filterType, opts.utpar, fOpts);
+                dbgLLH.H  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh];
             
             obj.parameterLearningMStep({'R'}, mstepOpts);
         otherwise
             error('Param Learning: FAIL. multiStep NOT IN (1,2,4)');
+    end
+    
+    % M-step: x0
+    if ~opts.fixX0
+        if multistep == 1
+            obj.smooth(opts.filterType, opts.utpar, fOpts); 
+            dbgLLH.R     = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh];
+        else
+            dbgLLH.R     = [0, dbgLLH.H(2)];
+        end
+        
+        obj.par.x0.mu    = obj.infer.smooth.x0.mu;
+        obj.par.x0.sigma = obj.infer.smooth.x0.sigma;
     end
     
     % update console

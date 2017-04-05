@@ -119,8 +119,8 @@ classdef dynamicalSystem < handle
           xx(:,1)  = obj.par.x0.mu;
           yyHat    = zeros(obj.d.y, obj.d.T);
           
-          transChol   = chol(obj.par.Q);
-          emissChol   = chol(obj.par.R);
+          transChol   = chol(obj.par.Q)';
+          emissChol   = chol(obj.par.R)';
           for tt = 1:obj.d.T
               u_t = [];
               if any(obj.hasControl); u_t = obj.u(:,tt); end
