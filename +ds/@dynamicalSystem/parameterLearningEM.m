@@ -97,7 +97,7 @@ end
 mstepOpts.anneal = 1;   % 1 corresponds to no annealing.
 
 % _______ initialise _____________________________________________________
-llh        = [-Inf; zeros(opts.maxiter,1)];
+llh        = [-Inf; NaN(opts.maxiter,1)];
 converged  = false;
 iterBar    = utils.base.objIterationBar;
 iterBar.newIterationBar('EM Iteration: ', opts.maxiter, true, '--- ', 'LLH change: ');
@@ -156,7 +156,7 @@ for ii = 1:opts.maxiter
             opts.sampleStability = 1;
         else
             % Doing ECM is not *guaranteed* to increase the llh on each step
-            multiStep = multiStep ./ 2;
+            multiStep = multiStep/2;
         end
     else
         % keep track of best llh found so far (no guarantees of monotonicity
@@ -191,14 +191,19 @@ for ii = 1:opts.maxiter
     % ----------------------------
     mstepOpts.anneal = da.cur;
     
-    % ____ Canonical parameters ___________________________________________
+    % ---------------------------------------------------------------------
+    % ____ Canonical parameters: A ________________________________________
+    % cannot do diagonal A and unconstrained B in M-step as yet.
     prevA         = obj.par.A;
-%     prevLLH       = obj.logLikelihood;
-
-    % randomly update either A or B first
-    for ss = randperm(2)
-        if ss == 1;                      obj.parameterLearningMStep({'A'}, mstepOpts); end
-        if ss == 2 && obj.hasControl(1); obj.parameterLearningMStep({'B'}, mstepOpts); end
+    if ~opts.diagA && multiStep > 1
+        obj.parameterLearningMStep({'A', 'B'}, mstepOpts);
+    else
+        % randomly update either A or B first
+        for ss = randperm(2)
+            if ss == 1;                      obj.parameterLearningMStep({'A'}, mstepOpts); end
+            if ss == 2 && obj.hasControl(1); obj.parameterLearningMStep({'B'}, mstepOpts); end
+            if multiStep == 1 && obj.hasControl(1); obj.smooth(opts.filterType, opts.utpar, fOpts); end
+        end
     end
     
     % Check for stability of A: significant problems when A blows up.
@@ -212,7 +217,12 @@ for ii = 1:opts.maxiter
             end
 %             badA         = obj.par.A;
 %             obj.par.A    = prevA;   % reset to last good A
-            obj.par.A    = stabiliseA_constraintGeneration(obj, prevA, opts.stableVerbose); % see mini function below ????
+            [obj.par.A, errConstrA]  = stabiliseA_constraintGeneration(obj, prevA, opts.stableVerbose); % see mini function below 
+            err          = stabiliseA_errorMsg(errConstrA);
+            if opts.verbose
+                fprintf('Done! (%.2f)\n', toc(cgTic)); 
+                if ~isempty(err); fprintf('STABLE OPTIM: %s\n', err); end
+            end
             if max(abs(eig(obj.par.A))) > 1
                  iterBar.updateText([iterBar.text, '*']);
 %                 keyboard
@@ -226,34 +236,42 @@ for ii = 1:opts.maxiter
         end
     end
     
-    % Q, H, R
-    switch multiStep
-        case 4
-            obj.parameterLearningMStep({'Q','H','R'}, mstepOpts);
-        case 2
-            obj.parameterLearningMStep({'Q'}, mstepOpts);
-                obj.smooth(opts.filterType, opts.utpar, fOpts);
-                obj.parameterLearningMStep({'H','R'}, mstepOpts);
-        case 1
-                obj.smooth(opts.filterType, opts.utpar, fOpts);
-            dbgLLH.A  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
-            
-            obj.parameterLearningMStep({'Q'}, mstepOpts);
-                obj.smooth(opts.filterType, opts.utpar, fOpts);
-                dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh];
-            
-            obj.parameterLearningMStep({'H'}, mstepOpts);
-                obj.smooth(opts.filterType, opts.utpar, fOpts);
-                dbgLLH.H  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh];
-            
-            obj.parameterLearningMStep({'R'}, mstepOpts);
-        otherwise
-            error('Param Learning: FAIL. multiStep NOT IN (1,2,4)');
+    if multiStep == 1
+        obj.smooth(opts.filterType, opts.utpar, fOpts);
+        % if A was constrained, B may no longer be optimal => do over
+        if prevStepWasConstrained
+            obj.parameterLearningMStep({'B'}, mstepOpts);
+            obj.smooth(opts.filterType, opts.utpar, fOpts);
+        end
     end
+    dbgLLH.A  = [obj.infer.llh - dbgLLH.x0(2), obj.infer.llh];
+    % ____ (END: parameter A) _____________________________________________
+    
+
+    % ____ Canonical parameters: Q, H, R (linear) _________________________
+    if multiStep == 4 && obj.emiLinear && obj.evoLinear
+        obj.parameterLearningMStep({'Q','H','R'}, mstepOpts);
+    elseif obj.evoLinear
+        obj.parameterLearningMStep({'Q'}, mstepOpts);
+        obj.smooth(opts.filterType, opts.utpar, fOpts);
+        dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh];
+
+        obj.parameterLearningMStep({'H'}, mstepOpts);
+        if multiStep < 4        
+            obj.smooth(opts.filterType, opts.utpar, fOpts);
+        end
+        dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh];
+    
+        obj.parameterLearningMStep({'R'}, mstepOpts);
+        % likelihood calculation happens later
+    else
+        % 
+    end
+    % ____ (END: parameter Q, H, R) _______________________________________
     
     % M-step: x0
     if ~opts.fixX0
-        if multistep == 1
+        if multiStep == 1
             obj.smooth(opts.filterType, opts.utpar, fOpts); 
             dbgLLH.R     = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh];
         else
@@ -284,30 +302,41 @@ end
 if ~converged && opts.verbose
     iterBar.finish;
     fprintf('EM did not converge in %d iterations\n', opts.maxiter);
+    
+    if obj.logLikelihood < bestpar{2}
+        obj.par = bestpar{1};
+        if opts.verbose
+            fprintf('Best log likelihood found on iteration %d of %d\n', bestpar{3}, ii);
+        end
+    end
+        
+    obj.smooth(opts.filterType, opts.utpar, fOpts);
 end
 
 llh = llh(2:ii+1);
 end
 
 
-function A = stabiliseA_constraintGeneration(obj, prvEstimate, verbose)
-    % -- what about x0 estimates?
-    m          = obj.infer.smooth.mu;
-%     P          = obj.infer.smooth.sigma;
-%     G          = obj.infer.smooth.G;
-%     sumP       = sum(cat(3,P{1:obj.d.T}),3);
-%     sumC       = 0;
-%     for tt = 1:obj.d.T-1
-%         sumC = sumC + P{tt+1} * G{tt}';
-%     end    
-% 
-%     sumC      = sumC;
+
+function [A, optCode] = stabiliseA_constraintGeneration(obj, prvEstimate, verbose)
     s         = obj.suffStats(struct('bIgnoreHash', true));
+    m         = obj.infer.smooth.mu;
     S1        = m(:,1:end-1);
     S2        = m(:,2:end);
     
     metric    = obj.par.Q; % doesn't seem to make a difference...?
-    metric    = eye(obj.d.x);
-%     sumP      = (sumP + sumP)./2;
-    A         = ds.utils.learnCGModel_EMQ(S1, S2, s.PHI, s.C', metric, obj.par.A, prvEstimate, verbose);
+%     metric    = eye(obj.d.x);
+    [A, optCode]  = ds.utils.learnCGModel_EMQ(S1, S2, s.PHI, s.C', metric, obj.par.A, prvEstimate, verbose);
+    if isequal(A, prevEstimate) && optCode >= 0
+        optCode = 9999;  % stable matrix unchanged
+    end
+        
+end
+
+function msg = stabiliseA_errorMsg(code)
+    if code == 9999
+        msg = 'No stable matrix found better than previous estimate.';
+        return
+    end
+    msg       = utils.optim.optimMessage(code, 'onlyErrors', true);
 end
