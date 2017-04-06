@@ -47,7 +47,7 @@ litecols      = utils.plot.colortint(cols, 0.8);
 cols          = utils.plot.colortint(litecols, 1.4);
 pforward      = 150;
 
-for ii = 10:40
+for ii = 38:40
     fprintf('*********** Patient %d of %02d ******************* \n', ii, maxPx);
     R      = 0.2;
     ss     = 4;
@@ -111,7 +111,7 @@ for kk = 1:3; cols(kk,:) = utils.plot.varyColor2(cnums(kk)); end
 litecols      = utils.plot.colortint(litecols, 0.8);
 cols          = utils.plot.colortint(litecols, 1.4);
 
-for ii = 10:14
+for ii = 1:40
     os = dsNaNCell{ii}.d.y;
     for jj = 1:4
         subplot(2,2,jj);
@@ -155,3 +155,33 @@ for ii = 10:14
 %     end
     pause
 end
+
+    %% visualise return to steady state
+    figure
+    cols          = utils.plot.colortint(litecols, 1.2);
+    for ii = 1:40
+        dsLDS = dsNaNCell{ii}.copy;
+        [impy, impPy] = dsLDS.impute_y('variance', true, 'smooth', true);
+        futurY        = dsLDS.getPredictFreeRun(dsLDS.d.T, pforward);
+        plot(Ys{ii}(1,:)', ':', 'Color', cols(1,:)); 
+        hold on;
+        for kk = 2:dsLDS.d.y
+            plot(Ys{ii}(kk,:)', ':', 'Color', cols(kk,:)); 
+        end
+        for kk = 1:dsLDS.d.y
+            plot(impy(kk,:)', 'Color', cols(kk,:));
+            plot(dsLDS.d.T+1:dsLDS.d.T+pforward, futurY(kk,:), 'Color', litecols(kk,:));
+        end
+        
+        hold off;
+        stdy          = sqrt(cell2mat(cellfun(@(x) diag(x)', impPy, 'Un', 0)))';
+        for jj = 1:dsLDS.d.y
+            nanidx          = find(isnan(dsLDS.y(jj,:)));
+            if isempty(nanidx); continue; end
+            nanminmax       = nanidx(1):nanidx(end);
+            utils.plot.confidenceInterval(nanminmax, impy(jj,nanminmax), stdy(jj,nanminmax), [], 'facecolor', cols(kk,:));
+        end
+        cmap           = flipud([1 0.86 0.91; 0.86 0.91 1]);
+        utils.plot.dataShadeVertical(1:(dsLDS.d.T), pump.target{ii}', cmap, 'edgedetect', 'manual', 'edgemanual', 3);
+        pause
+    end

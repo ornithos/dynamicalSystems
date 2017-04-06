@@ -1,7 +1,7 @@
 function [f, d] = derivEmiWrapper(obj, x, varargin)
     % [f, d] = derivEmiWrapper(obj, x)
-    % Wrapper for optimisation of derivative of emission parameters. Allows
-    % function call from vector of parameters and returns vector of
+    % Wrapper for optimisation of derivative of emission parameters for *gen_sigmoid*.
+    % Allows function call from vector of parameters and returns vector of
     % gradient as well as objective value.
     % Vector of parameters: x = [eta(:); C(:)];
     
