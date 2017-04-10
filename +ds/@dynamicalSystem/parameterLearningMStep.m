@@ -44,7 +44,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
                 warning('Unknown fix command: ''fix%s'' in M-step options', rmUpdate);
             end
             findel   = ismember(updateOnly, rmUpdate);
-            if opts.(oname) && any(findel)
+            if opts.(oname) && ~strcmp(rmUpdate, 'BIAS2')
                 updateOnly(findel) = [];
                 opts = rmfield(opts, oname);
             end

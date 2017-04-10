@@ -260,7 +260,7 @@ for ii = 1:opts.maxiter
         if multiStep < 4        
             obj.smooth(opts.filterType, opts.utpar, fOpts);
         end
-        dbgLLH.Q  = [obj.infer.llh - dbgLLH.A(2), obj.infer.llh];
+        dbgLLH.H  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh];
     
         obj.parameterLearningMStep({'R'}, mstepOpts);
         % likelihood calculation happens later
@@ -280,6 +280,8 @@ for ii = 1:opts.maxiter
         
         obj.par.x0.mu    = obj.infer.smooth.x0.mu;
         obj.par.x0.sigma = obj.infer.smooth.x0.sigma;
+    else
+        dbgLLH.R     = [0, dbgLLH.H(2)];
     end
     
     % update console
@@ -327,7 +329,7 @@ function [A, optCode] = stabiliseA_constraintGeneration(obj, prvEstimate, verbos
     metric    = obj.par.Q; % doesn't seem to make a difference...?
 %     metric    = eye(obj.d.x);
     [A, optCode]  = ds.utils.learnCGModel_EMQ(S1, S2, s.PHI, s.C', metric, obj.par.A, prvEstimate, verbose);
-    if isequal(A, prevEstimate) && optCode >= 0
+    if isequal(A, prvEstimate) && optCode >= 0
         optCode = 9999;  % stable matrix unchanged
     end
         

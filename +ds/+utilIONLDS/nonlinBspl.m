@@ -1,6 +1,8 @@
 function [h, D] = nonlinBspl(z, pars, bspl)
     X    = pars.C * z;
-    
+    if isfield(pars.bias) && ~isempty(pars.bias)
+        X = bsxfun(@plus, X, pars.bias);
+    end
     
     h    = bspl.functionEval(X, pars.eta);
     

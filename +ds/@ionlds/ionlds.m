@@ -41,6 +41,7 @@ classdef ionlds < ds.dynamicalSystem
       [a,D,q]            = expLogJoint_bspl(obj, varargin); % Q(theta, theta_n) / free energy less entropy -- USES bspline nonlin
       D                  = getGradient(obj, par, doCheck) % get gradient of parameters
       [llh, niters]      = parameterLearningEM(obj, opts); % do learning
+      [llh, niters]      = parameterLearningEM_bspl(obj, opts); % do learning for bspline version
    end
       
 end

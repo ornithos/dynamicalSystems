@@ -34,7 +34,7 @@ function [a, D, q] = expLogJoint_bspl(obj, varargin)
                          'utpar', [], 'gamma', false);
                          
     opts        = utils.base.processVarargin(varargin, optsDefault);
-
+    ssopts      = struct('bIgnoreHash', ~opts.recalcPosterior);
     
     %%
     tmpobj  = obj.copy;
@@ -59,6 +59,7 @@ function [a, D, q] = expLogJoint_bspl(obj, varargin)
     
     % Nonlinear bit
     % -- IONLDS = no control in emission
+    % --- CAREFUL --- [ymHx, M2] have zeros for NaNs, if taking means be  aware ---
     if isempty(opts.utpar), [ymHx, M2, XSP, Wc] = ds.utilIONLDS.utTransform_ymHx_bspl(obj);
     else,                   [ymHx, M2, XSP, Wc] = ds.utilIONLDS.utTransform_ymHx_bspl(obj, utpar.alpha, utpar.beta, utpar.kappa);
     end

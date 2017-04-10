@@ -9,9 +9,11 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
     d         = obj.d.y;
     emiParams = obj.par.emiNLParams;
     assert(isfield(emiParams, 'C'), 'parameter C not found in emission parameters');
-    emiParams = emiParams.eta;
-    assert(isnumeric(emiParams) && (all(size(emiParams) == [1, 4]) || all(size(emiParams) == [d, 4])), ...
-        'emiParams.eta must be a matrix of size (1, 4) or (d.y, 4)');
+    if ~isfield(emiParams, 'bias'); emiParams.bias = []; end
+    assert(isnumeric(emiParams.eta) && all(size(emiParams.eta) == [d, 10]), ...
+        'emiParams.eta must be a matrix of size (d.y, 10)');
+    assert(isnumeric(emiParams.bias) && (isempty(emiParams.bias) || all(size(emiParams.bias) == [d, 1])), ...
+        'emiParams.bias must be a matrix of size (d.y, 1)');
     
     if nargin == 1
         alpha = 1;
@@ -44,6 +46,7 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
         
         % save
         CX(:,:,tt) = obj.par.emiNLParams.C * spts;
+        if ~isempty(emiParams.bias); CX(:,:,tt) = bsxfun(@plus, CX(:,:,tt), emiParams.bias); end
         XSP(:,(1+2*n)*(tt-1) + (1:2*n+1)) = spts;
     end
     
@@ -55,13 +58,13 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
     
     %% Calculate outputs
     % run through nonlinear function
-    Hx       = ds.utilIONLDS.nonlinBsplNoC(CX, emiParams);
+    Hx       = ds.utilIONLDS.nonlinBsplNoC(CX, emiParams.eta, emiParams.bspl);
     ymHxSP   = bsxfun(@minus, permute(obj.y, [1, 3, 2]), Hx);  % tensor of Y - h(sigma points)
 
     ymHxSPWm = bsxfun(@times, ymHxSP, permute(Wm, [2,1,3]));   % weighted tensor ymHxSP (mean weight)
     
     if nargout <= 2
-        ymHx     = squeeze(sum(ymHxSPWm,2));  % sum over weighted sigma points
+        ymHx     = squeeze(nansum(ymHxSPWm,2));  % sum over weighted sigma points
     else
         ymHx     = reshape(ymHxSP, d, (1+2*n)*(obj.d.T));
     end
@@ -71,10 +74,20 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
 %         outerprod = zeros(d, d, obj.d.T);
         outerprod = zeros(d,d);
         ymHxSPWc = bsxfun(@times, ymHxSP, permute(Wc, [2,1,3]));   % weighted tensor ymHxSP (cov weight)
-        
+
         for tt = 1:obj.d.T
-%             outerprod(:,:,tt) = ymHxSPWc(:,:,tt) * ymHxSP(:,:,tt)';  % only need to weight one of the product
-            outerprod = outerprod + ymHxSPWc(:,:,tt) * ymHxSP(:,:,tt)';  % only need to weight one of the product
+            curIncr   = ymHxSPWc(:,:,tt) * ymHxSP(:,:,tt)';  % weight (only) one of the product. 
+            
+            % handle missing values
+            %    *---> cov(y_obs, y_unobs) = 0     (path blocked)
+            %    *---> E(y_u - h_u(x_t))(y_u - h_u(x_t))') = R_u    since E(y_u) = h_u(x_t)
+            if any(isnan(obj.y(:,tt)))
+                missing   = isnan(obj.y(:,tt));
+                curIncr(missing, missing)  = obj.par.R(missing, missing);
+                curIncr(missing, ~missing) = 0;
+                curIncr(~missing, missing) = 0;
+            end
+            outerprod = outerprod + curIncr;
         end
     end
 end
