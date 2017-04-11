@@ -1,4 +1,4 @@
-function [llh, ii] = parameterLearningEM(obj, opts)
+function [llh, ii] = parameterLearningEM_bspl(obj, opts)
 
 if nargin < 2 || isempty(opts); opts = struct; end
 optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL', 5, ...
@@ -84,7 +84,7 @@ end
 % _________ Optimisation options ________________________________________
 optimDisplay       = 'iter-detailed'; %'none';    % 'iter-detailed'
 LARGE_OPTIM_ITER   = 400;
-SMALL_OPTIM_ITER   = 200;    % for later: interleaving smaller optimisation steps
+SMALL_OPTIM_ITER   = 100;    % after initial optimisations, only small tweaks reqd
 optimOpts          = optimoptions('fminunc','Algorithm','quasi-newton','Display', optimDisplay, ...
                                     'SpecifyObjectiveGradient', false, 'MaxFunEvals', LARGE_OPTIM_ITER);
 
@@ -275,7 +275,25 @@ for ii = 1:opts.maxiter
         iterBar.currOutputLen = 0;
     end
     
-    if opts.dbg; [F,~,q] = obj.expLogJoint('freeEnergy', true); end
+%     iterNonlinInner = 2;
+%     for cNLIter = 1:iterNonlinInner
+%         CX_c          = obj.par.emiNLParams.C * obj.infer.smooth 
+%         if ~isempty(obj.par.emiNLparams.bias); CX_c = bsxfun(@plus, CX_c, obj.par.emiNLparams.bias); end
+%         splBasis      = obj.par.emiNLParams.bspl.basisEval(;
+%         cumB_RL       = fliplr(cumsum(fliplr(splBasis),2));		
+%         [tmp,~,~,xfl] = lsqnonneg(cumB_RL, y-c);		
+%         utils.optim.optimMessage(xfl, 'onlyErrors', true);		
+%         coeff         = cumsum(tmp);		
+%     end
+    
+      if ii <= 3 || ii == opts.maxiter
+          optimOpts = optimoptions(optimOpts, 'MaxFunEvals', LARGE_OPTIM_ITER);
+      else
+          optimOpts = optimoptions(optimOpts, 'MaxFunEvals', SMALL_OPTIM_ITER);
+      end
+      optimEmi.options = optimOpts;
+      
+    if opts.dbg; [F,~,q] = obj.expLogJoint_bspl('freeEnergy', true); end
     emiOptOut     = fminunc(optimEmi);  % <- magic happens here
     optimEmi.x0   = emiOptOut;
     
@@ -283,7 +301,7 @@ for ii = 1:opts.maxiter
     ds.utilIONLDS.updateParams_bspl(obj, emiOptOut);
 
     if opts.dbg
-        [F1,~,q1] = obj.expLogJoint('freeEnergy', true);
+        [F1,~,q1] = obj.expLogJoint_bspl('freeEnergy', true);
         fprintf('M-Step: ''H'' --- Change in FreeNRG: %5.8f\n', F1 - F);
     end
     

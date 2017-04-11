@@ -31,6 +31,7 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
     scl      = sqrt(n + lambda);
     
     CX       = zeros(d, 2*n + 1, obj.d.T);
+    Hx       = zeros(d, 2*n + 1, obj.d.T);
     XSP      = zeros(n, (2*n + 1)*obj.d.T);
 
     for tt = 1:obj.d.T
@@ -47,6 +48,7 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
         % save
         CX(:,:,tt) = obj.par.emiNLParams.C * spts;
         if ~isempty(emiParams.bias); CX(:,:,tt) = bsxfun(@plus, CX(:,:,tt), emiParams.bias); end
+        Hx(:,:,tt) = ds.utilIONLDS.nonlinBsplNoC(CX(:,:,tt), emiParams.eta, emiParams.bspl);
         XSP(:,(1+2*n)*(tt-1) + (1:2*n+1)) = spts;
     end
     
@@ -58,7 +60,10 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
     
     %% Calculate outputs
     % run through nonlinear function
-    Hx       = ds.utilIONLDS.nonlinBsplNoC(CX, emiParams.eta, emiParams.bspl);
+    
+    % spline does not work with tensors (but doesn't error either!!)
+    % (moved into CX loop).
+    
     ymHxSP   = bsxfun(@minus, permute(obj.y, [1, 3, 2]), Hx);  % tensor of Y - h(sigma points)
 
     ymHxSPWm = bsxfun(@times, ymHxSP, permute(Wm, [2,1,3]));   % weighted tensor ymHxSP (mean weight)
