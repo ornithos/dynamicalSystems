@@ -173,16 +173,17 @@ function [m, P, addlLLH] = internal_updateStepMissing(obj, parUpdate, m_minus, P
     missIdx       = isnan(y);
     Y             = y(~missIdx);
     
-    parUpdate.bias=parUpdate.bias(~missIdx);
     if obj.emiLinear
-        parUpdate.A = parUpdate.A(~missIdx,:);            % actually H
-        parUpdate.Q = parUpdate.Q(~missIdx,~missIdx);     % actually R
+        parUpdate.bias = parUpdate.bias(~missIdx);
+        parUpdate.A    = parUpdate.A(~missIdx,:);            % actually H
+        parUpdate.Q    = parUpdate.Q(~missIdx,~missIdx);     % actually R
     else
         [~,~,h,Dh]    = obj.functionInterfaces;
         % hack-y way to permit multiple statements in anonymous function
         AREF          = @(A,B) subsref(A, struct('type', '()', 'subs', {B}));
-        parUpdate.f   = @(x, pars) AREF(h(x, pars), {find(~missIdx)});
-        parUpdate.Df  = @(x, pars) AREF(Dh(x, pars), {find(~missIdx), ':'});
+        parUpdate.f   = @(x) AREF(h(x), {find(~missIdx), ':'});
+        parUpdate.Df  = @(x) AREF(Dh(x), {find(~missIdx), ':'});
+        parUpdate.Q   = parUpdate.Q(~missIdx,~missIdx);     % actually R
     end
     
     % perform standard update

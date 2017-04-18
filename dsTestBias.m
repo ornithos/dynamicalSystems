@@ -47,8 +47,8 @@ litecols      = utils.plot.colortint(cols, 0.8);
 cols          = utils.plot.colortint(litecols, 1.4);
 pforward      = 150;
 
-for ii = 13:13
-    fprintf('*********** Patient %d of %02d ******************* \n', ii, maxPx);
+for ii = 2:13
+    fprintf('*********** Patient %d ******************* \n', ii);
     R      = 0.2;
     ss     = 4;
     os     = size(Ys{ii},1);
@@ -86,7 +86,8 @@ for ii = 13:13
     [impy, impPy] = dsLDS.impute_y('variance', true, 'smooth', true);
     futurY        = dsLDS.getPredictFreeRun(dsLDS.d.T, pforward);
     plot(Ys{ii}', ':'); hold on;
-    plot(impy'); plot(dsLDS.d.T+1:dsLDS.d.T+pforward, futurY); hold off;
+%     plot(impy'); plot(dsLDS.d.T+1:dsLDS.d.T+pforward, futurY); hold off;
+    plot(impy'); plot(1:dsLDS.d.T+pforward, futurY); hold off;
     stdy          = sqrt(cell2mat(cellfun(@(x) diag(x)', impPy, 'Un', 0)))';
     for jj = 1:os
         nanidx          = find(isnan(dsLDS.y(jj,:)));
@@ -96,6 +97,7 @@ for ii = 13:13
     end
     cmap           = flipud([1 0.86 0.91; 0.86 0.91 1]);
     utils.plot.dataShadeVertical(1:(dsLDS.d.T), pump.target{ii}', cmap, 'edgedetect', 'manual', 'edgemanual', 3);
+    
     dsNaNCell{ii} = dsLDS.copy;
 end
 
@@ -108,10 +110,10 @@ testpredahead = [1, 10, 20, Inf];
 cols          = zeros(3,3);
 cnums         = [2 4 5];
 for kk = 1:3; cols(kk,:) = utils.plot.varyColor2(cnums(kk)); end
-litecols      = utils.plot.colortint(litecols, 0.8);
+litecols      = utils.plot.colortint(cols, 0.8);
 cols          = utils.plot.colortint(litecols, 1.4);
 
-for ii = 1:40
+for ii = 4:4
     os = dsNaNCell{ii}.d.y;
     for jj = 1:4
         subplot(2,2,jj);

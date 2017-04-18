@@ -81,6 +81,7 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
         ymHxSPWc = bsxfun(@times, ymHxSP, permute(Wc, [2,1,3]));   % weighted tensor ymHxSP (cov weight)
 
         for tt = 1:obj.d.T
+%             if all(isnan(obj.y(:,tt))); continue; end
             curIncr   = ymHxSPWc(:,:,tt) * ymHxSP(:,:,tt)';  % weight (only) one of the product. 
             
             % handle missing values
@@ -88,9 +89,9 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
             %    *---> E(y_u - h_u(x_t))(y_u - h_u(x_t))') = R_u    since E(y_u) = h_u(x_t)
             if any(isnan(obj.y(:,tt)))
                 missing   = isnan(obj.y(:,tt));
-                curIncr(missing, missing)  = obj.par.R(missing, missing);
                 curIncr(missing, ~missing) = 0;
                 curIncr(~missing, missing) = 0;
+                curIncr(missing,  missing) = obj.par.R(missing, missing);
             end
             outerprod = outerprod + curIncr;
         end

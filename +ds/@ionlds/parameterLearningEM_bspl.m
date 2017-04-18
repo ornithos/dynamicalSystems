@@ -82,19 +82,19 @@ for oname = optFds   % fixA, fixQ, fix....
 end
 
 % _________ Optimisation options ________________________________________
-optimDisplay       = 'iter-detailed'; %'none';    % 'iter-detailed'
+optimDisplay       = 'none'; %'iter-detailed'; %'none'; 
 LARGE_OPTIM_ITER   = 400;
 SMALL_OPTIM_ITER   = 100;    % after initial optimisations, only small tweaks reqd
 optimOpts          = optimoptions('fminunc','Algorithm','quasi-newton','Display', optimDisplay, ...
-                                    'SpecifyObjectiveGradient', false, 'MaxFunEvals', LARGE_OPTIM_ITER);
+                                    'SpecifyObjectiveGradient', true, 'CheckGradients', false, 'MaxFunEvals', LARGE_OPTIM_ITER);
+chgEtas            = logical([0 0 1 1 1 1 1 1 0 0]);
+% chgEtas            = logical([1 1 1 1 1 1 1 1 1 1]);
 
-eljOpts            = struct;
 optimEmi.options   = optimOpts;
-optimEmi.objective = @(x) ds.utilIONLDS.derivEmiWrapper_bspl(obj, x, eljOpts);
+optimEmi.objective = @(x) ds.utilIONLDS.derivEmiWrapper_bspl(obj, x, 'fixBias2', opts.fixBias2, 'etaMask', chgEtas);
 optimEmi.solver    = 'fminunc';
-adaptEta           = obj.par.emiNLParams.eta(:,3:end-2);
+adaptEta           = obj.par.emiNLParams.eta(:,chgEtas);
 optimEmi.x0        = [adaptEta(:); obj.par.emiNLParams.C(:); obj.par.emiNLParams.bias(:)];
-
 
 % remove linear updates where non-linear function
 if ~obj.evoLinear
@@ -294,12 +294,27 @@ for ii = 1:opts.maxiter
       optimEmi.options = optimOpts;
       
     if opts.dbg; [F,~,q] = obj.expLogJoint_bspl('freeEnergy', true); end
+    adaptEta      = obj.par.emiNLParams.eta(:, chgEtas);
+    optimEmi.x0   = [adaptEta(:); obj.par.emiNLParams.C(:); obj.par.emiNLParams.bias(:)];
     emiOptOut     = fminunc(optimEmi);  % <- magic happens here
     optimEmi.x0   = emiOptOut;
     
     % update parameters from optimisation search
-    ds.utilIONLDS.updateParams_bspl(obj, emiOptOut);
+    ds.utilIONLDS.updateParams_bspl(obj, emiOptOut, chgEtas);
 
+    % solve small QP (better quality solution for etas)
+    obj.smooth(opts.filterType, opts.utpar, fOpts);
+    qpopts   = optimoptions('quadprog', 'Display', 'none');
+    eta      = obj.par.emiNLParams.eta(:,chgEtas)';
+    [~,~,mm] = ds.utilIONLDS.bsplineGrad(obj, opts.utpar, 'etaMask', chgEtas);
+    ub       = repelem(max(obj.par.emiNLParams.eta,[],2), sum(chgEtas), 1);
+    [eta,~,xfl] = quadprog(mm.K, -mm.v, [], [],[],[],zeros(size(eta(:))),ub,eta(:), qpopts);
+    utils.optim.optimMessage(xfl, 'onlyErrors', true);
+    obj.par.emiNLParams.eta(:,chgEtas) = reshape(eta, sum(chgEtas), obj.d.y)';
+    
+    
+    
+    
     if opts.dbg
         [F1,~,q1] = obj.expLogJoint_bspl('freeEnergy', true);
         fprintf('M-Step: ''H'' --- Change in FreeNRG: %5.8f\n', F1 - F);
