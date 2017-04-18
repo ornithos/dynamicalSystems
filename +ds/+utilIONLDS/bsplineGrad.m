@@ -84,11 +84,10 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
     K            = K .* kron(Rinv, ones(l));
     
     % Use quantities to calculate gradient
-    keep         = opts.etaMask(:); keep2D = repmat(keep, d, 1);
-    theta        = emiParams.eta(:, keep)'; theta = theta(:);
-    v            = v(keep2D);
-    K            = K(keep2D, keep2D');
+    theta        = emiParams.eta';
+    theta        = theta(:);
     grad         = v' - theta'*K;
+    grad         = grad(repmat(opts.etaMask(:), d, 1));
     
     % ________________ FUNCTION VAL (REUSE ETA GRADIENT) __________________
     % function value
