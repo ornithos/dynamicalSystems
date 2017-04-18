@@ -30,7 +30,8 @@ function [y, covY] = impute_y(obj, varargin)
     optsDefault.variance  = false;
     optsDefault.bIgnoreHash = false;   % do not check inference
     optsDefault.sample    = false;
-    
+    optsDefault.utpar     = struct('alpha', 1, 'beta', 0, 'kappa', 0);
+
     opts                  = utils.base.processVarargin(varargin, optsDefault);
     if ~(opts.filter || opts.smooth)
         opts.smooth = true;             % default
@@ -57,12 +58,19 @@ function [y, covY] = impute_y(obj, varargin)
     % precompute cholesky if need samples
     cholR      = chol(obj.par.R);
     
+    % UKF handles emissions differently as does not linearise: E(f(x)) ~= f(E(x))
+    doUKF      = ~isempty(obj.infer.fType) && strcmpi(obj.infer.fType(1), 'u');
+    
     % impute missing values
     for tt = find(anyMissing)
         u_t     = [];
         if obj.hasControl(2); u_t = obj.u(:,tt); end
         if ~opts.sample
-            yhat_tt  = obj.doEmission(xhat(:,tt), u_t);
+            if ~doUKF
+                yhat_tt  = obj.doEmission(xhat(:,tt), u_t);
+            else
+                yhat_tt  = obj.doEmission(xhat(:,tt), u_t, P{tt}, opts.utpar);
+            end
         else
             tmpx     = xhat(:,tt) + chol(P{tt})' * randn(obj.d.x, 1);
             yhat_tt  = obj.doEmission(tmpx, u_t) + cholR' * randn(obj.d.y, 1);
@@ -75,9 +83,17 @@ function [y, covY] = impute_y(obj, varargin)
     if opts.variance
         d    = obj.d.y;
         
+        if doUKF; [~,~,h,~]    = obj.functionInterfaces; end
+
         covY = repmat({zeros(d)}, obj.d.T,1);
         for tt = find(anyMissing)
-            covY_tt  = obj.par.H * P{tt} * obj.par.H' + obj.par.R;
+            if ~doUKF
+                covY_tt  = obj.par.H * P{tt} * obj.par.H' + obj.par.R;
+            else
+                utFns        = struct('f', h, 'Q', obj.par.R);
+                u_t          = []; if obj.hasControl(2); u_t = obj.u(:,tt); end
+                [~, covY_tt] = ds.utils.assumedDensityTform(utFns, xhat(:,tt), P{tt}, u_t, 2, opts.utpar);
+            end
             mask     = missing(:,tt);
             covY_tt(~mask, ~mask) = 0;
             covY{tt} = covY_tt;

@@ -148,13 +148,17 @@ classdef dynamicalSystem < handle
           this.opts.warnings = curWarns;
       end
       
-      function fitted = getFittedValues(obj)
+      function fitted = getFittedValues(obj, utpar)
           obj.ensureInference('FITVALS', 'smooth');
           fitted = zeros(obj.d.y, obj.d.T);
           for tt = 1:obj.d.T
               u_t = [];
               if any(obj.hasControl); u_t = obj.u(:,tt); end
-              fitted(:,tt) = obj.doEmission(obj.infer.smooth.mu(:,tt), u_t);
+              if nargin < 2 || isempty(utpar)
+                fitted(:,tt) = obj.doEmission(obj.infer.smooth.mu(:,tt), u_t);
+              else
+                fitted(:,tt) = obj.doEmission(obj.infer.smooth.mu(:,tt), u_t, obj.infer.smooth.sigma{tt}, utpar);
+              end
           end
           if nargout == 0
               % overwrite existing values.
@@ -162,7 +166,7 @@ classdef dynamicalSystem < handle
           end
       end
       
-      function fitted = getPredictedValues(obj, nlookahead)
+      function fitted = getPredictedValues(obj, nlookahead, utpar)
           if nargin < 2; nlookahead = 0; end
           obj.ensureInference('PREDVALS', 'filter');
           
@@ -172,21 +176,30 @@ classdef dynamicalSystem < handle
           end
           assert(nlookahead >= 0, 'lagged smoothing values not implemented. Try nlookahead=-Inf for Smoothed');
           
-          fitted = zeros(obj.d.y, obj.d.T - nlookahead);
+          %if ~obj.emiLinear; [~,~,h,Dh]    = obj.functionInterfaces; nlpars.f = h; nlpars.Df = Dh; end
+          doLinOrEKF = nargin < 3 || isempty(utpar);
+          fitted     = zeros(obj.d.y, obj.d.T - nlookahead);
+          
           for tt = 1:obj.d.T - nlookahead
               x_t = obj.infer.filter.mu(:,tt);
               u_t = [];
               if any(obj.hasControl); u_t = obj.u(:,tt); end
+              if ~doLinOrEKF; P = obj.infer.filter.sigma{tt}; end
               for jj = 1:nlookahead
                   x_t = obj.doTransition(x_t, u_t);
                   u_t = [];
                   if any(obj.hasControl); u_t = obj.u(:,tt+jj); end
+                  if ~doLinOrEKF; P = obj.par.A*P*obj.par.A' + obj.par.Q; end
               end
-              fitted(:,tt) = obj.doEmission(x_t, u_t);
+              if doLinOrEKF
+                fitted(:,tt) = obj.doEmission(x_t, u_t);
+              else
+                fitted(:,tt) = obj.doEmission(x_t, u_t, P, utpar);
+              end
           end
       end
       
-      function predict = getPredictFreeRun(obj, t, l)
+      function predict = getPredictFreeRun(obj, t, l, utpar)
           % predict from (time t), (l datapoints) forward
           if nargin < 2; t = 1; end
           assert(utils.is.scalarint(t) && t > 0 && t <= obj.d.T, 't must be a scalar int in 1,...,T');
@@ -197,7 +210,10 @@ classdef dynamicalSystem < handle
           assert(utils.is.scalarint(l) && l > 0, 'l must be a positive scalar int');
           obj.ensureInference('PREDVALS', 'filter');
           
-          predict = zeros(obj.d.y, l);
+          doLinOrEKF = nargin < 4 || isempty(utpar);
+          if ~doLinOrEKF; P = obj.infer.filter.sigma{t+1}; end
+          
+          predict = NaN(obj.d.y, t+l);
           x_t = obj.infer.filter.mu(:, t);
           for tt = t+1:t+l
               if tt <= obj.d.T && any(obj.hasControl)
@@ -206,7 +222,12 @@ classdef dynamicalSystem < handle
                   u_t = 0;
               end
               x_t             = obj.doTransition(x_t, u_t);
-              predict(:,tt-t) = obj.doEmission(x_t, u_t);
+              if ~doLinOrEKF; P = obj.par.A*P*obj.par.A' + obj.par.Q; end
+              if doLinOrEKF
+                predict(:,tt) = obj.doEmission(x_t, u_t);
+              else
+                predict(:,tt) = obj.doEmission(x_t, u_t, P, utpar);
+              end
           end
       end
       
@@ -515,7 +536,7 @@ classdef dynamicalSystem < handle
                 else, out = f(input, u); end
             end
         end
-        function out = doEmission(obj, input, u)
+        function out = doEmission(obj, input, u, P, utpar)
             b       = zeros(obj.d.y, 1);
             if ~isempty(obj.par.c); b = obj.par.c; end
             if obj.emiLinear
@@ -523,8 +544,14 @@ classdef dynamicalSystem < handle
                  if obj.hasControl(2); out = out + obj.par.C * u; end
             else
                 [~,~,h,~]    = obj.functionInterfaces;
-                if ~obj.hasControl(2), out = h(input);
-                else, out = h(input, u); end
+                if nargin == 5 && ~isempty(utpar)
+                    nlpars.f = h;
+                    nlpars.Q = 0;
+                    out   = ds.utils.assumedDensityTform(nlpars, input, P, u, 2, utpar);
+                else
+                    if ~obj.hasControl(2); out   = h(input);
+                    else, out = h(input, u); end
+                end
             end
         end
         % ------------------------------------------------
