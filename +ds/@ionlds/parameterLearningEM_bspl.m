@@ -302,6 +302,14 @@ for ii = 1:opts.maxiter
     % update parameters from optimisation search
     ds.utilIONLDS.updateParams_bspl(obj, emiOptOut, chgEtas);
 
+%     % test gradients (orig file vs monotonic file are same)
+%     [fMono,gradMono] = ds.utilIONLDS.bsplineGradMono(obj, []);
+%     [fOrig,gradOrig] = ds.utilIONLDS.bsplineGrad(obj, []);
+%     assert(abs(fMono - fOrig) < 1e-9, 'fval differences > 1e-9');
+%     assert(max(max(abs(gradMono.eta - gradOrig.eta))) < 1e-10, 'eta grad differences > 1e-10');
+%     assert(max(max(abs(gradMono.C - gradOrig.C))) < 1e-10, 'C grad differences > 1e-10');
+%     assert(max(max(abs(gradMono.bias - gradOrig.bias))) < 1e-10, 'bias grad differences > 1e-10');
+    
     % solve small QP (better quality solution for etas)
     obj.smooth(opts.filterType, opts.utpar, fOpts);
     qpopts   = optimoptions('quadprog', 'Display', 'none');
