@@ -1,4 +1,4 @@
-function [f, grad, more] = bsplineGradMono(obj, utpar, varargin)
+function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
     % admin
     assert(isa(obj, 'ds.dynamicalSystem'), 'first argument must be a valid dynamicalSystems object');
     n         = obj.d.x;
@@ -11,7 +11,7 @@ function [f, grad, more] = bsplineGradMono(obj, utpar, varargin)
     assert(isnumeric(emiParams.bias) && (isempty(emiParams.bias) || all(size(emiParams.bias) == [d, 1])), ...
         'emiParams.bias must be a matrix of size (d.y, 1)');
     
-    if nargin == 1 || isempty(utpar) || isempty(fieldnames(utpar))
+    if nargin <= 2 || isempty(utpar) || isempty(fieldnames(utpar))
         alpha = 1;
         beta  = 0;
         kappa = 0;
@@ -24,19 +24,7 @@ function [f, grad, more] = bsplineGradMono(obj, utpar, varargin)
     
     optsDefault.etaMask    = false(0);
     optsDefault.gradient   = true;
-    optsDefault.C          = [];
-    optsDefault.bias       = [];
     opts                   = utils.base.processVarargin(varargin, optsDefault);
-    
-    % optionally update parameters
-    if ~isempty(opts.C)
-        assert(all(size(opts.C)==size(obj.par.emiNLParams.C)), 'C is not the right size. Should be %d by %d', size(obj.par.emiNLParams.C));
-        assert(all(size(opts.bias)==size(obj.par.emiNLParams.bias)), 'bias is not the right size');
-        tmpobj = obj;
-        obj    = tmpobj.copy;
-        obj.par.emiNLParams.C    = opts.C;
-        obj.par.emiNLParams.bias = opts.bias;
-    end
     
     % get number of knots (excl masked-out ones)
     l            = numel(emiParams.bspl.t)-2;
@@ -44,18 +32,30 @@ function [f, grad, more] = bsplineGradMono(obj, utpar, varargin)
     assert(numel(opts.etaMask)==l, 'etaMask is not same length as spline basis (%d)', l);
     keepIdx      = opts.etaMask(:);
     keepIdx2D    = repmat(keepIdx, d, 1);
+    lAdapt       = sum(keepIdx);
     
     % --------- DEBUG OPTIONS ---------------------------------------
     doSlow       = false;   % for debugging
     doConstant   = false;    % constant terms in function value (ie. y*y')
+    
+    %% Update Parameters
+    assert(all(size(x) == [d*lAdapt + d*n + d,1]), 'input must be %d by %d', [d*lAdapt + d*n + d,1]);
+    
+    % save current parameters
+    prevEta   = obj.par.emiNLParams.eta;
+    prevC     = obj.par.emiNLParams.C;
+    prevBias  = obj.par.emiNLParams.bias;
+    
+    ds.utilIONLDS.updateParams_bspl(obj, x, keepIdx');
+
+    emiParams = obj.par.emiNLParams;
     
     %% Calculations
     
     % SIGMA POINTS
     [W, spts]    = getSigmaPtStuff(obj, alpha, beta, kappa);
     
-    % ________________ GRADIENT FOR ETA __________________________________
-    % MISSING VALUES AND PRE-CALCULATION
+    % pre-calculations (+ missing vals)
     y          = obj.y;
     ymiss      = isnan(y);
     y(ymiss)   = 0;                      % non-observed (whether partial or full) y's do not contribute!
@@ -67,13 +67,15 @@ function [f, grad, more] = bsplineGradMono(obj, utpar, varargin)
     tmpK       = zeros(l*d, (2*n + 1)*obj.d.T);   % pretty big....
     wc         = W.c;
     Hx         = zeros(d, (2*n + 1)*obj.d.T);
-    
+
     % convert eta ---> theta (by differencing)
     theta      = zeros(d, l); 
     theta(:,1) = emiParams.eta(:,1);
     theta(:,2:end) = diff(emiParams.eta,1,2);
+%     theta      = emiParams.eta;   % CHANGEME
     
-    % MAIN LOOP (over dimension of y <- most efficient)
+    %% MAIN LOOP (over dimension of y <- most efficient)
+    %   ----------- (Major work of function) ----------------
     for dd = 1:d
         basis                    = emiParams.bspl.basisEval(spts.CXSP(dd,:));
         basis(repelem(ymiss(dd,:), 1, 2*n+1),:) = 0;   % zero missing vals (because of R^-1, cannot just do in y_t).
@@ -81,6 +83,7 @@ function [f, grad, more] = bsplineGradMono(obj, utpar, varargin)
         Hx(dd,:)                 = basis * emiParams.eta(dd,:)';
         
         basisBack                = cumsum(basis, 2, 'reverse');  % backward arrow
+%         basisBack                = basis; % CHANGEME
         % ( Note backward basis not needed for grad{C,b}, hence Hx
         % calculated without this.)
         
@@ -96,14 +99,22 @@ function [f, grad, more] = bsplineGradMono(obj, utpar, varargin)
     K            = bsxfun(@times, tmpK, repmat(wc', 1, obj.d.T)) * tmpK';    % sum w tmpK * tmpK'
     K            = K .* kron(Rinv, ones(l));
     
+    %%
+    % ________________ GRADIENT FOR ETA __________________________________
     % Use quantities to calculate gradient
     thetavec     = reshape(theta', [], 1);
     grad_eta     = v' - thetavec'*K;
-    for dd = 1:d
-        grad_eta((dd-1)*l+1:(dd*l - 1))     = -diff(grad_eta((dd-1)*l+1:dd*l));
-        %grad_eta(dd*l)                      = grad_eta(dd*l);   % (FINAL ELEMENT: DO NOTHING!)
-    end
+    
+    % optimise theta = exp(u)
+    grad_eta     = grad_eta .* thetavec'; % CHANGEME
+    
+%     for dd = 1:d
+%         grad_eta((dd-1)*l+1:(dd*l - 1))     = -diff(grad_eta((dd-1)*l+1:dd*l));
+%         %grad_eta(dd*l)                      = grad_eta(dd*l);   % (FINAL ELEMENT: DO NOTHING!)
+%     end
     grad_eta     = grad_eta(keepIdx2D);
+    grad_eta     = reshape(grad_eta,sum(keepIdx), d)';    % reorder
+    grad_eta     = grad_eta(:);                           % reorder
     
     % ________________ FUNCTION VAL (REUSE ETA GRADIENT) __________________
     % function value
@@ -182,6 +193,13 @@ function [f, grad, more] = bsplineGradMono(obj, utpar, varargin)
     %--- /END (DEBUG) --------------------------------------------------
     
     %% Output
+    
+    % restore previous values
+    obj.par.emiNLParams.eta  = prevEta;
+    obj.par.emiNLParams.C    = prevC;
+    obj.par.emiNLParams.bias = prevBias;
+    
+    % return values
     if opts.gradient
         grad   = struct('eta', grad_eta, 'C', grad_Cb(:,1:n), 'bias', grad_Cb(:,n+1));
     end

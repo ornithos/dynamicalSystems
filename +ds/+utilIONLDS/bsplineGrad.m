@@ -68,7 +68,8 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
     wc     = W.c;
     Hx     = zeros(d, (2*n + 1)*obj.d.T);
     
-    % MAIN LOOP (over dimension of y <- most efficient)
+    %% MAIN LOOP (over dimension of y <- most efficient)
+    %   ----------- (Major work of function) ----------------
     for dd = 1:d
         basis                    = emiParams.bspl.basisEval(spts.CXSP(dd,:));
         basis(repelem(ymiss(dd,:), 1, 2*n+1),:) = 0;   % zero missing vals (because of R^-1, cannot just do in y_t).
@@ -85,6 +86,8 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
     end
     K            = bsxfun(@times, tmpK, repmat(wc', 1, obj.d.T)) * tmpK';    % sum w tmpK * tmpK'
     K            = K .* kron(Rinv, ones(l));
+    
+    %%
     
     % Use quantities to calculate gradient
     theta        = emiParams.eta';

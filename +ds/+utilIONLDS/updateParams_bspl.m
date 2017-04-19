@@ -1,4 +1,4 @@
-function updateParams_bspl(obj, varargin)
+function prev = updateParams_bspl(obj, varargin)
     
     dy                        = obj.d.y;
     dx                        = obj.d.x;
@@ -17,6 +17,7 @@ function updateParams_bspl(obj, varargin)
         case 3
             % updateParams_bspl(obj, eta, C, bias)
             %   * distribute parameters
+            assert(nargout == 0, 'Unable to produce output for the 2-parameter specification');
             assert(all(size(varargin{1}) == size(obj.par.emiNLParams.eta)), 'eta wrong size');
             assert(all(size(varargin{2}) == [dy, dx]), 'eta wrong size');
             assert(all(size(varargin{3}) == [dy, 1]), 'bias wrong size');
@@ -30,16 +31,30 @@ function updateParams_bspl(obj, varargin)
             error('Do not know what to do with %d inputs. Chppse either {x} or {eta, C, bias}');
     end
     
-    
     % update parameters
     if ~isempty(etaMask)
-        szEta                     = sum(etaMask);
-        obj.par.emiNLParams.eta(:,etaMask)   = reshape(x(1:dy*szEta), dy, szEta);
+        szEta                 = sum(etaMask);
     else
-        eta                       = obj.par.emiNLParams.eta;
-        szEta                     = size(eta,2);
-        obj.par.emiNLParams.eta   = reshape(x(1:dy*szEta), dy, szEta);
+        szEta                 = size(obj.par.emiNLParams.eta,2);
+        etaMask               = true(1, szEta);
     end
+    
+    newEtas                   = reshape(x(1:dy*szEta), dy, szEta);
+    newEtas                   = cumsum(exp(newEtas), 2);   % CHANGEME
+    
+    if nargout > 0
+        prev = getCurrParamVector(obj, etaMask);
+    end
+    
+    obj.par.emiNLParams.eta(:,etaMask)   = newEtas;
+    
+    % other params
     obj.par.emiNLParams.C     = reshape(x((dy*szEta+1):(dy*szEta+dy*dx)), dy, dx);
     obj.par.emiNLParams.bias  = reshape(x((dy*szEta+dy*dx+1):end), dy, 1);
+end
+
+function out =  getCurrParamVector(obj, etaMask)
+    emiParams = obj.par.emiNLParams;
+    cEta      = emiParams.eta(:, etaMask);
+    out       = [cEta(:); emiParams.C(:); emiParams.bias(:)];
 end

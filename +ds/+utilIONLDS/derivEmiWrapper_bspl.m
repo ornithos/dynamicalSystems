@@ -11,27 +11,40 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
     
     nvgin = numel(varargin);
     
-    % process varargin manually for speed
-    opts.fixBias2 = false;
-    opts.utpar    = struct;
+    % process varargin manually for speed (? not sure this is still worth
+    % it -- initially were only a couple of options)
+    fixBias2 = false;
+    utpar    = struct;
+    etaUB    = Inf(dy,1);
     opts.etaMask  = [];
+    
     if nvgin > 3 && ischar(varargin{1}) 
         while ~isempty(varargin)
             assert(ischar(varargin{1}), 'varargin must come in name-value pairs');
             switch varargin{1}
                 case 'fixBias2'
                     assert(islogical(varargin{2}) && isscalar(varargin{2}), 'fixBias2 must be logical scalar');
-                    opts.fixBias2 = varargin{2};
+                    fixBias2 = varargin{2};
                 case 'utpar'
                     assert(isstruct(varargin{2}), 'utpars must be a struct');
                     if all(ismember({'alpha', 'beta', 'kappa'}, fieldnames(varargin{2})))
-                        opts.utpars = varargin{2};
+                        utpar = varargin{2};
                     elseif ~isempty(fieldnames(varargin{2}))
                         warning('Need alpha, beta, kappa fieldnames in utpars. Not found so ignoring');
                     end
                 case 'etaMask'
                     assert(numel(varargin{2}) == size(obj.par.emiNLParams.eta,2), 'etaMask is not conformable to eta');
                     opts.etaMask = varargin{2};
+                case 'etaUB'
+                    if ~isempty(varargin{2})
+                        assert(numel(varargin{2}) == size(obj.par.emiNLParams.eta,1), 'etaUB must have d dimensions');
+                        etaUB = varargin{2};
+                    end
+                case 'bfgsSpline'
+                    if ~isempty(varargin{2})
+                        assert(isscalar(varargin{2}) && islogical(varargin{2}), 'bfgsSpline must be scalar logical');
+                        bfgsSpline = varargin{2};
+                    end
                 otherwise
                     warning('unknown options specified: %s (I understand %s)', varargin{1}, strjoin(opts.fieldnames, ','));
             end
@@ -41,20 +54,16 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
     
     nKnot = sum(opts.etaMask);
     assert(isnumeric(x) && numel(x) == dy*nKnot + dy*(dx+1), 'parameter vector is not the correct size');
-    
-    fixBias2    = opts.fixBias2;
-    utpar       = opts.utpar;
-    opts        = rmfield(opts, 'fixBias2');  % for use in bsplineGrad
-    opts        = rmfield(opts, 'utpar');
+
     %% Function body
     
     % save current parameters
-    eta   = obj.par.emiNLParams.eta;
-    C     = obj.par.emiNLParams.C;
-    bias  = obj.par.emiNLParams.bias;
-    
-    % update parameters from input
-    ds.utilIONLDS.updateParams_bspl(obj, x, opts.etaMask);
+%     eta   = obj.par.emiNLParams.eta;
+%     C     = obj.par.emiNLParams.C;
+%     bias  = obj.par.emiNLParams.bias;
+%     
+%     % update parameters from input
+%     ds.utilIONLDS.updateParams_bspl(obj, x, opts.etaMask);
     
     % replace bias so as not to mess with finite difference (if checking)
     if fixBias2
@@ -63,17 +72,29 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
     
     % get function val and gradient
     if nargout > 1
-        [f, D] = ds.utilIONLDS.bsplineGrad(obj, utpar, opts);
+        [f, D] = ds.utilIONLDS.bsplineGradMono(obj, x, utpar, opts);
         if ~fixBias2
             d                = [D.eta(:); D.C(:); D.bias(:)];
         else
             d                = [D.eta(:); D.C(:); zeros(size(D.bias(:)))];
         end
+        
+        % (ie do not optimise spline coefficients)
+        if ~bfgsSpline
+            d(1:nKnot*dy)    = 0;
+        end
+%         
+%         violateUB        = bsxfun(@gt, obj.par.emiNLParams.eta(:,opts.etaMask), etaUB);   % <-- this is nonsense since obj pars changed *INSIDE* grad fn now...
+%         violateUB        = [violateUB(:); false(dy*(dx+1),1)] & d > 0;
+%         if any(any(violateUB))
+%            d(violateUB)     = 0;
+%         end
+        
         % maximisation ----> minimisation
         f                = -f;
         d                = -d;  % see below (negation)
     else
-        f                = ds.utilIONLDS.bsplineGrad(obj, utpar, 'gradient', false);
+        f                = ds.utilIONLDS.bsplineGradMono(obj, x, utpar, 'gradient', false);
         
         % maximisation ----> minimisation
         f                = -f;
@@ -82,6 +103,7 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
     end
     
     % reset object parameters (is a handle object)
-    ds.utilIONLDS.updateParams_bspl(obj, eta, C, bias);
+%     ds.utilIONLDS.updateParams_bspl(obj, eta, C, bias);
+    
     
 end
