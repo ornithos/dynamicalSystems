@@ -1,4 +1,4 @@
-function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
+function [f, grad, more] = bsplineGrad(obj, x, utpar, varargin)
     % admin
     assert(isa(obj, 'ds.dynamicalSystem'), 'first argument must be a valid dynamicalSystems object');
     n         = obj.d.x;
@@ -11,7 +11,7 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
     assert(isnumeric(emiParams.bias) && (isempty(emiParams.bias) || all(size(emiParams.bias) == [d, 1])), ...
         'emiParams.bias must be a matrix of size (d.y, 1)');
     
-    if nargin == 1 || isempty(utpar) || isempty(fieldnames(utpar))
+    if nargin <= 2 || isempty(utpar) || isempty(fieldnames(utpar))
         alpha = 1;
         beta  = 0;
         kappa = 0;
@@ -24,19 +24,7 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
     
     optsDefault.etaMask    = false(0);
     optsDefault.gradient   = true;
-    optsDefault.C          = [];
-    optsDefault.bias       = [];
     opts                   = utils.base.processVarargin(varargin, optsDefault);
-    
-    % optionally update parameters (for passing par values into grad fn)
-    if ~isempty(opts.C)
-        assert(all(size(opts.C)==size(obj.par.emiNLParams.C)), 'C is not the right size. Should be %d by %d', size(obj.par.emiNLParams.C));
-        assert(all(size(opts.bias)==size(obj.par.emiNLParams.bias)), 'bias is not the right size');
-        tmpobj = obj;
-        obj    = tmpobj.copy;
-        obj.par.emiNLParams.C    = opts.C;
-        obj.par.emiNLParams.bias = opts.bias;
-    end
     
     % get number of knots (excl masked-out ones)
     l            = numel(emiParams.bspl.t)-2;
@@ -44,35 +32,48 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
     assert(numel(opts.etaMask)==l, 'etaMask is not same length as spline basis (%d)', l);
     keepIdx      = opts.etaMask(:);
     keepIdx2D    = repmat(keepIdx, d, 1);
+    lAdapt       = sum(keepIdx);
     
     % --------- DEBUG OPTIONS ---------------------------------------
     doSlow       = false;   % for debugging
     doConstant   = false;    % constant terms in function value (ie. y*y')
     
-    %% Calculations
+    %% Update Parameters
+    assert(all(size(x) == [d*lAdapt + d*n + d,1]), 'input must be %d by %d', [d*lAdapt + d*n + d,1]);
+    
+    % save current parameters
+    prevEta   = obj.par.emiNLParams.eta;
+    prevC     = obj.par.emiNLParams.C;
+    prevBias  = obj.par.emiNLParams.bias;
+    
+    ds.utilIONLDS.updateParams_bspl(obj, x, keepIdx');
 
+    emiParams = obj.par.emiNLParams;
+    
+    %% Calculations
+    
     % SIGMA POINTS
     [W, spts]    = getSigmaPtStuff(obj, alpha, beta, kappa);
     
-    % ________________ GRADIENT FOR ETA __________________________________
-    % MISSING VALUES AND PRE-CALCULATION
-    y            = obj.y;
-    ymiss        = isnan(y);
-    y(ymiss)     = 0;                      % non-observed (whether partial or full) y's do not contribute!
-    Rinv         = inv(obj.par.R);
-    RinvY        = Rinv*y;
+    % pre-calculations (+ missing vals)
+    y          = obj.y;
+    ymiss      = isnan(y);
+    y(ymiss)   = 0;                      % non-observed (whether partial or full) y's do not contribute!
+    Rinv       = inv(obj.par.R);
+    RinvY      = Rinv*y;
     
     % pre-allocation
-    v      = zeros(l*d, 1);
-    tmpK   = zeros(l*d, (2*n + 1)*obj.d.T);   % pretty big....
-    wc     = W.c;
-    Hx     = zeros(d, (2*n + 1)*obj.d.T);
+    v          = zeros(l*d, 1);
+    tmpK       = zeros(l*d, (2*n + 1)*obj.d.T);   % pretty big....
+    wc         = W.c;
+    Hx         = zeros(d, (2*n + 1)*obj.d.T);
     
     %% MAIN LOOP (over dimension of y <- most efficient)
     %   ----------- (Major work of function) ----------------
     for dd = 1:d
         basis                    = emiParams.bspl.basisEval(spts.CXSP(dd,:));
         basis(repelem(ymiss(dd,:), 1, 2*n+1),:) = 0;   % zero missing vals (because of R^-1, cannot just do in y_t).
+        
         Hx(dd,:)                 = basis * emiParams.eta(dd,:)';
         
         % basis is (2*n+1)*T   X   ell          dimension matrix
@@ -88,12 +89,14 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
     K            = K .* kron(Rinv, ones(l));
     
     %%
-    
+    % ________________ GRADIENT FOR ETA __________________________________
     % Use quantities to calculate gradient
-    theta        = emiParams.eta';
-    theta        = theta(:);
-    grad         = v' - theta'*K;
-    grad         = grad(keepIdx2D);
+    thetavec     = reshape(emiParams.eta', [], 1);
+    grad_eta     = v' - thetavec'*K;
+    grad_eta     = grad_eta(keepIdx2D);
+    
+    grad_eta     = reshape(grad_eta,sum(keepIdx), d)';    % reorder
+    grad_eta     = grad_eta(:);                           % reorder
     
     % ________________ FUNCTION VAL (REUSE ETA GRADIENT) __________________
     % function value
@@ -103,7 +106,7 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
             yy = yy + y(:,tt)'*Rinv*y(:,tt);
         end
     end
-    f            = v'*theta - 0.5*theta'*K*theta - 0.5*yy - 0.5*sum(ymiss(:));
+    f            = v'*thetavec - 0.5*thetavec'*K*thetavec - 0.5*yy - 0.5*sum(ymiss(:));
     
     % ________________ GRADIENT FOR C, beta _______________________________
     if opts.gradient
@@ -120,9 +123,9 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
     if doSlow
         % gradient
         [sv,sK] = slowGrad(obj, spts.CXSP, wc);
-        sgrad   = sv' - theta'*sK;
-        if norm(grad - sgrad) > 1e-8
-            warning('gradients differ by %e (L2 norm)', norm(grad - sgrad))
+        sgrad   = sv' - thetavec'*sK;
+        if norm(grad_eta - sgrad) > 1e-8
+            warning('gradients differ by %e (L2 norm)', norm(grad_eta - sgrad))
         end
         
         % function val
@@ -150,7 +153,7 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
         end
         
         f    = ff;
-        grad = sgrad;
+        grad_eta = sgrad;
         
         sgrad_Cb     = 0;
         for tt = 1:obj.d.T
@@ -170,8 +173,15 @@ function [f, grad, more] = bsplineGrad(obj, utpar, varargin)
     %--- /END (DEBUG) --------------------------------------------------
     
     %% Output
+    
+    % restore previous values
+    obj.par.emiNLParams.eta  = prevEta;
+    obj.par.emiNLParams.C    = prevC;
+    obj.par.emiNLParams.bias = prevBias;
+    
+    % return values
     if opts.gradient
-        grad   = struct('eta', grad, 'C', grad_Cb(:,1:n), 'bias', grad_Cb(:,n+1));
+        grad   = struct('eta', grad_eta, 'C', grad_Cb(:,1:n), 'bias', grad_Cb(:,n+1));
     end
     if nargout > 2
         more.v  = v(keepIdx2D);

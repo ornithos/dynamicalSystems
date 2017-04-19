@@ -85,7 +85,7 @@ end
 %% _________ Optimisation options ________________________________________
 
 nonlinOpts                  = struct;
-nonlinOpts.optimDisplay     = 'none';   %'iter-detailed'; %'none';
+nonlinOpts.display          = 'none';   %'iter-detailed'; %'none';
 nonlinOpts.large_iter       = 400;      % initial # BFGS iterations
 nonlinOpts.small_iter       = 100;      % subsequent # iterations - only small mvmts required.
 nonlinOpts.optimType        = 'fminunc';
@@ -93,8 +93,14 @@ nonlinOpts.chgEtas          = true(1, numel(obj.par.emiNLParams.bspl.t));  % def
 nonlinOpts.etaUB            = [];
 nonlinOpts.bfgsSpline       = false;
 nonlinOpts.monotoneWarning  = true;
+nonlinOpts.dbgVisualisation = false;
 nonlinOpts                  = utils.struct.structCoalesce(opts.nonlinOptimOpts, nonlinOpts);
 
+% ensure no bad combinations
+if strcmp(nonlinOpts.optimType, 'fmincon') && ~nonlinOpts.bfgsSpline
+    error(['This is a stupid request (optimType = fmincon, bfsSpline = false)!', ...
+        'Only the spline coefficients are constrained, so fmincon will needlessly slow everything down.']);
+end
 
 % transform eta --> theta (hat). Used for optimisation object x0.
 theta              = [obj.par.emiNLParams.eta(:,1), diff(obj.par.emiNLParams.eta, [], 2)];
@@ -102,13 +108,19 @@ if any(theta(:) <= 0)
     if nonlinOpts.monotoneWarning; warning('some values of eta are nonincreasing. Replacing where relevant with diff of 1e-12'); end
     theta = max(theta, 1e-12);
 end
-u                  = log(theta);
+if strcmp(nonlinOpts.optimType, 'fminunc')
+    u                  = log(theta);
+else
+    u                  = theta;    % fmincon does not need to work in logspace.
+end
 adaptU             = u(:, nonlinOpts.chgEtas);
 
 
+nChgEtas           = sum(nonlinOpts.chgEtas);
+
 % Set up optimisation object for fminunc / fmincon.
 assert(ismember(nonlinOpts.optimType, {'fminunc', 'fmincon'}), 'optimType must be ''fminunc'' or ''fmincon''');
-optimOpts          = optimoptions(nonlinOpts.optimType, 'Display', nonlinOpts.optimDisplay, ...
+optimOpts          = optimoptions(nonlinOpts.optimType, 'Display', nonlinOpts.display, ...
                                     'SpecifyObjectiveGradient', true, 'CheckGradients', false, 'MaxFunEvals', nonlinOpts.large_iter);
 if strcmp(nonlinOpts.optimType, 'fminunc')
     optimOpts = optimoptions(optimOpts, 'Algorithm','quasi-newton');
@@ -125,8 +137,15 @@ optimEmi.objective = @(x) ds.utilIONLDS.derivEmiWrapper_bspl(obj, x, 'fixBias2',
 nonlinOpts.A       = kron(eye(obj.d.y), ones(1,sum(nonlinOpts.chgEtas)));
 nonlinOpts.b       = nonlinOpts.etaUB;
 if strcmp(nonlinOpts.optimType, 'fmincon')
-    optimEmi.Aineq         = [nonlinOpts.A, zeros(obj.d.y, obj.d.y*(obj.d.x + 1))];
+    % need to interleave constraint A as optimised column-wise, not row-wise
+    intleave               = [1:nChgEtas; (nChgEtas+1):(nChgEtas*2); (nChgEtas*2+1):(nChgEtas*3)];
+    optimEmi.Aineq         = nonlinOpts.A(:, reshape(intleave(1:obj.d.y,:), 1, nChgEtas*obj.d.y));
+    optimEmi.Aineq         = [optimEmi.Aineq, zeros(obj.d.y, obj.d.y*(obj.d.x + 1))]; 
     optimEmi.bineq         = nonlinOpts.b;
+    optimEmi.lb            = [zeros(nChgEtas*obj.d.y,1); -Inf(obj.d.y*(obj.d.x + 1), 1)];
+    logSpace               = false;
+else
+    logSpace               = true;
 end
 
 % for ease of reference, add chgEtas to workspace.
@@ -157,6 +176,8 @@ iterBar.newIterationBar('EM Iteration: ', opts.maxiter, true, '--- ', 'LLH chang
 
 % multistep: do all 4 (default) maximisations together initially.
 multiStep  = opts.multistep;
+if opts.strictNegativeCheck; multiStep = 1; end
+
 if ~(~opts.verbose && ~opts.stableVerbose)
     % if no verbose, switch off iteration count (.) in constraint gen script.
     % else stableVerbose = 1 is the dots, stableVerbose = 2 is the full thing
@@ -199,10 +220,8 @@ for ii = 1:opts.maxiter
         iterBar.updateText([iterBar.text, '*']);
         if multiStep == 1
             % basically things have gone really wrong by here..
-            iterBar.clearConsole;
-%             fprintf('min eigv Q = %.3e', min(eig(obj.par.Q)));
-%             fprintf(', min eigv R = %.3e\n', min(eig(obj.par.R)));
-            keyboard
+%             iterBar.clearConsole;
+%             keyboard
         elseif opts.sampleStability > 1
             % only periodically sampling stability of A leads to jumps..
             opts.sampleStability = 1;
@@ -307,7 +326,7 @@ for ii = 1:opts.maxiter
     % ____ (END: parameter Q) _____________________________________________
     
     %% ========= Optimise Nonlinear emission function ===================
-    if ~strcmp(nonlinOpts.optimDisplay, 'none')
+    if ~strcmp(nonlinOpts.display, 'none')
         fprintf('\n');
         iterBar.currOutputLen = 0;
     end
@@ -331,7 +350,7 @@ for ii = 1:opts.maxiter
     optimEmi.x0   = emiOptOut;
     
     % update parameters from optimisation search
-    ds.utilIONLDS.updateParams_bspl(obj, emiOptOut, chgEtas);
+    ds.utilIONLDS.updateParams_bspl(obj, emiOptOut, chgEtas, 'logSpace', logSpace);
 
 %     % test gradients (orig file vs monotonic file are same)
 %     [fMono,gradMono] = ds.utilIONLDS.bsplineGradMono(obj, []);
@@ -342,26 +361,32 @@ for ii = 1:opts.maxiter
 %     assert(max(max(abs(gradMono.bias - gradOrig.bias))) < 1e-10, 'bias grad differences > 1e-10');
     
     % DEBUG VISUALISATION
-%     figure
-%     xtmp = bsxfun(@plus, obj.par.emiNLParams.C*obj.infer.smooth.mu, obj.par.emiNLParams.bias);
-%     xtmp = floor(min(min(xtmp))):ceil(max(max(xtmp)));
-%     for zzz = 1:2
-%         subplot(1,2,zzz); plot(xtmp, obj.par.emiNLParams.bspl.functionEval(xtmp, obj.par.emiNLParams.eta(zzz,:))); hold on; 
-%         plot(bsxfun(@plus, obj.par.emiNLParams.C(zzz,:)*obj.infer.smooth.mu, obj.par.emiNLParams.bias(zzz)), obj.y(zzz,:), '*'); hold off; 
-%     end
+    if nonlinOpts.dbgVisualisation
+        figure
+        xtmp = bsxfun(@plus, obj.par.emiNLParams.C*obj.infer.smooth.mu, obj.par.emiNLParams.bias);
+        xtmp = floor(min(min(xtmp))):ceil(max(max(xtmp)));
+        for zzz = 1:obj.d.y
+            subplot(1,obj.d.y,zzz); plot(xtmp, obj.par.emiNLParams.bspl.functionEval(xtmp, obj.par.emiNLParams.eta(zzz,:))); hold on; 
+            plot(bsxfun(@plus, obj.par.emiNLParams.C(zzz,:)*obj.infer.smooth.mu, obj.par.emiNLParams.bias(zzz)), obj.y(zzz,:), '*'); hold off; 
+        end
+    end
     
     % if optimising spline outside of BFGS, solve small QP.
     if ~nonlinOpts.bfgsSpline
         obj.smooth(opts.filterType, opts.utpar, fOpts);
         qpopts                              = optimoptions('quadprog', 'Display', 'none');
-        eta0                                = exp(reshape(emiOptOut(1:sum(chgEtas)*obj.d.y),obj.d.y,sum(chgEtas)))';
+        eta0                                = exp(reshape(emiOptOut(1:nChgEtas*obj.d.y),obj.d.y,nChgEtas))';
         [~,~,mm]                            = ds.utilIONLDS.bsplineGradMono(obj, emiOptOut, opts.utpar, 'etaMask', chgEtas);
+        if norm(mm.K-mm.K') > 1e-9
+            keyboard;
+        end
+        mm.K                                = (mm.K+mm.K')./2;
         [eta,~,xfl]                         = quadprog(mm.K, -mm.v, nonlinOpts.A, nonlinOpts.b, [],[],...
                                                         zeros(size(eta0(:))),[],eta0(:), qpopts);
         utils.optim.optimMessage(xfl, 'onlyErrors', true);
-        obj.par.emiNLParams.eta(:,chgEtas)  = cumsum(reshape(eta, sum(chgEtas), obj.d.y), 1)';
-        tfeta                               = reshape(log(eta), sum(chgEtas), obj.d.y)';
-        optimEmi.x0(1:obj.d.y*sum(chgEtas)) = tfeta(:);
+        obj.par.emiNLParams.eta(:,chgEtas)  = cumsum(reshape(eta, nChgEtas, obj.d.y), 1)';
+        tfeta                               = reshape(log(eta), nChgEtas, obj.d.y)';
+        optimEmi.x0(1:obj.d.y*nChgEtas) = tfeta(:);
     
     
 %         figure
@@ -380,14 +405,16 @@ for ii = 1:opts.maxiter
             obj.smooth(opts.filterType, opts.utpar, fOpts);
             if multiStep==1; dbgLLH.H  = [obj.infer.llh - dbgLLH.Q(2), obj.infer.llh]; end
             if dbgLLH.H(1) < -1e-3
-                nonlinOpts.small_iter = min(nonlinOpts.small_iter + 50, nonlinOpts.large_iter);
-                if opts.verbose
+                prev_small_iter       = nonlinOpts.small_iter;
+                nonlinOpts.small_iter = min([nonlinOpts.small_iter + 50, nonlinOpts.large_iter, 300]);
+                if opts.verbose && (nonlinOpts.small_iter ~= prev_small_iter)
                     iterBar.clearConsole;
                     fprintf('Increased function evals for BFGS + 50\n');
                 end
             end
         end
-        
+      
+    %% Remaining parameters
     % ____ Canonical parameters: R ________________________________________
     if opts.dbg; [F,~,q] = obj.expLogJoint; end
     [~,M2]        = ds.utilIONLDS.utTransform_ymHx_bspl(obj);

@@ -24,6 +24,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
     
     optsDefault.etaMask    = false(0);
     optsDefault.gradient   = true;
+    optsDefault.gradientU  = true;     % vs gradient of theta (reparameterisation)
     opts                   = utils.base.processVarargin(varargin, optsDefault);
     
     % get number of knots (excl masked-out ones)
@@ -46,7 +47,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
     prevC     = obj.par.emiNLParams.C;
     prevBias  = obj.par.emiNLParams.bias;
     
-    ds.utilIONLDS.updateParams_bspl(obj, x, keepIdx');
+    ds.utilIONLDS.updateParams_bspl(obj, x, keepIdx', 'logSpace', opts.gradientU);
 
     emiParams = obj.par.emiNLParams;
     
@@ -106,7 +107,9 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
     grad_eta     = v' - thetavec'*K;
     
     % optimise theta = exp(u)
-    grad_eta     = grad_eta .* thetavec'; % CHANGEME
+    if opts.gradientU
+        grad_eta     = grad_eta .* thetavec'; % CHANGEME
+    end
     
 %     for dd = 1:d
 %         grad_eta((dd-1)*l+1:(dd*l - 1))     = -diff(grad_eta((dd-1)*l+1:dd*l));

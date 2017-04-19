@@ -427,7 +427,7 @@ classdef dynamicalSystem < handle
 %       obj = smoothLinear(obj, bDoValidation); % RTS Smoother
 %        obj = smoothExtended(obj, bDoValidation); % Extended (EKF) RTS Smoother
 %       obj = smoothUnscented(obj, bDoValidation, utpar); % Unscented (UKF) RTS Smoother
-      smooth(obj, fType, utpar, opts) % one of dynamics linear, other piped to NL.
+      smooth(obj, fType, utpar, varargin); % one of dynamics linear, other piped to NL.
       ssid(obj, L);  % Subspace ID
       [llh, niters] = parameterLearningEM(obj, opts);
       lhHist        = parameterLearnOnline(obj, fType, opts, utpar)

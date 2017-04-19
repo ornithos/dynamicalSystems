@@ -1,9 +1,15 @@
 function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
     % [f, d] = derivEmiWrapper(obj, x)
-    % Wrapper for optimisation of derivative of emission parameters for *gen_sigmoid*.
+    % Wrapper for optimisation of derivative of emission parameters for *bspline*.
     % Allows function call from vector of parameters and returns vector of
     % gradient as well as objective value.
     % Vector of parameters: x = [eta(:); C(:); bias(:)];
+    %
+    % This wrapper has become increasingly unnecessary as virtually all
+    % work has been moved into bsplineGrad function(s).
+    %
+    % It is nevertheless useful for taking care of certain arguments such
+    % as not optimising bias or eta.
     
     assert(isa(obj, 'ds.ionlds'),  'input object is not a valid IONLDS object');
     dy    = obj.d.y;
@@ -13,10 +19,12 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
     
     % process varargin manually for speed (? not sure this is still worth
     % it -- initially were only a couple of options)
-    fixBias2 = false;
-    utpar    = struct;
-    etaUB    = Inf(dy,1);
-    opts.etaMask  = [];
+    fixBias2       = false;
+    utpar          = struct;
+    etaUB          = Inf(dy,1);
+    bfgsSpline     = false;
+    opts.etaMask   = [];
+    opts.gradientU = true;
     
     if nvgin > 3 && ischar(varargin{1}) 
         while ~isempty(varargin)
@@ -43,10 +51,11 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
                 case 'bfgsSpline'
                     if ~isempty(varargin{2})
                         assert(isscalar(varargin{2}) && islogical(varargin{2}), 'bfgsSpline must be scalar logical');
-                        bfgsSpline = varargin{2};
+                        bfgsSpline     = varargin{2};
+                        opts.gradientU = ~bfgsSpline;
                     end
                 otherwise
-                    warning('unknown options specified: %s (I understand %s)', varargin{1}, strjoin(opts.fieldnames, ','));
+                    warning('unknown options specified: %s (I understand %s)', varargin{1}, 'fixBias2, utpar, etaMask, etaUB, bfgsSpline');
             end
             varargin(1:2) = [];
         end
@@ -94,12 +103,21 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
         f                = -f;
         d                = -d;  % see below (negation)
     else
-        f                = ds.utilIONLDS.bsplineGradMono(obj, x, utpar, 'gradient', false);
-        
+        opts.gradient    = false;
+        %f                = ds.utilIONLDS.bsplineGradMono(obj, x, utpar, opts);
+    eta   = obj.par.emiNLParams.eta;
+    C     = obj.par.emiNLParams.C;
+    bias  = obj.par.emiNLParams.bias;
+    ds.utilIONLDS.updateParams_bspl(obj, x, opts.etaMask, 'logSpace', opts.gradientU);
+    
+        f                = expLogJoint_bspl(obj);
         % maximisation ----> minimisation
         f                = -f;
 %         [~,M2] = ds.utilIONLDS.utTransform_ymHx_bspl(obj);
 %         f = -0.5*trace(inv(obj.par.R)*M2);
+    obj.par.emiNLParams.eta  = eta;
+    obj.par.emiNLParams.C    = C;
+    obj.par.emiNLParams.bias = bias;
     end
     
     % reset object parameters (is a handle object)

@@ -113,7 +113,7 @@ for kk = 1:3; cols(kk,:) = utils.plot.varyColor2(cnums(kk)); end
 litecols      = utils.plot.colortint(cols, 0.8);
 cols          = utils.plot.colortint(litecols, 1.4);
 
-for ii = 4:4
+for ii = 1:4
     os = dsNaNCell{ii}.d.y;
     for jj = 1:4
         subplot(2,2,jj);

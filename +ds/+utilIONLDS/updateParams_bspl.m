@@ -1,37 +1,32 @@
-function prev = updateParams_bspl(obj, varargin)
+function prev = updateParams_bspl(obj, x, etaMask, varargin)
     
     dy                        = obj.d.y;
     dx                        = obj.d.x;
     
-    switch numel(varargin) 
-        case 1
-            % updateParams_bspl(obj, x)
-            %   * Resize, reshape and distribute parameters (*BELOW*)
-            x       = varargin{1};
-            etaMask = [];
-        case 2
-            % updateParams_bspl(obj, x, etaMask)
-            % mask out certain elements of eta
-            x       = varargin{1};
-            etaMask = varargin{2};
-        case 3
-            % updateParams_bspl(obj, eta, C, bias)
-            %   * distribute parameters
-            assert(nargout == 0, 'Unable to produce output for the 2-parameter specification');
-            assert(all(size(varargin{1}) == size(obj.par.emiNLParams.eta)), 'eta wrong size');
-            assert(all(size(varargin{2}) == [dy, dx]), 'eta wrong size');
-            assert(all(size(varargin{3}) == [dy, 1]), 'bias wrong size');
-            obj.par.emiNLParams.eta   = varargin{1};
-            obj.par.emiNLParams.C     = varargin{2};
-            obj.par.emiNLParams.bias  = varargin{3};
-            
-            % (----> RETURN <-----)
-            return
-        otherwise
-            error('Do not know what to do with %d inputs. Chppse either {x} or {eta, C, bias}');
+    logSpace                  = true;
+    
+    if nargin < 3
+        etaMask = [];
     end
     
-    % update parameters
+    if nargin >= 4
+        while ~isempty(varargin)
+            assert(ischar(varargin{1}), 'varargin must come in name-value pairs');
+            switch varargin{1}
+                case 'logSpace'
+                    assert(islogical(varargin{2}) && isscalar(varargin{2}), 'logSpace must be logical scalar');
+                    logSpace = varargin{2};
+                otherwise
+                    warning('unknown options specified: %s (I understand %s)', varargin{1}, strjoin({'logSpace'}, ','));
+            end
+            varargin(1:2) = [];
+        end
+    end
+    
+    
+    % ________ update parameters __________________________
+    
+    % Eta
     if ~isempty(etaMask)
         szEta                 = sum(etaMask);
     else
@@ -40,12 +35,18 @@ function prev = updateParams_bspl(obj, varargin)
     end
     
     newEtas                   = reshape(x(1:dy*szEta), dy, szEta);
-    newEtas                   = cumsum(exp(newEtas), 2);   % CHANGEME
     
+    if logSpace
+        newEtas                   = exp(newEtas);
+    end
+    newEtas                   = cumsum(newEtas, 2);   % CHANGEME
+    
+    % (In case user requests output)
     if nargout > 0
-        prev = getCurrParamVector(obj, etaMask);
+        prev = getCurrParamVector(obj, etaMask, logSpace);
     end
     
+    % eta update
     obj.par.emiNLParams.eta(:,etaMask)   = newEtas;
     
     % other params
@@ -53,8 +54,10 @@ function prev = updateParams_bspl(obj, varargin)
     obj.par.emiNLParams.bias  = reshape(x((dy*szEta+dy*dx+1):end), dy, 1);
 end
 
-function out =  getCurrParamVector(obj, etaMask)
+function out =  getCurrParamVector(obj, etaMask, logSpace)
     emiParams = obj.par.emiNLParams;
     cEta      = emiParams.eta(:, etaMask);
+    cEta      = [cEta(:,1), diff(cEta(:,2:end), 1, 2)];
+    if logSpace; cEta = log(cEta); end
     out       = [cEta(:); emiParams.C(:); emiParams.bias(:)];
 end
