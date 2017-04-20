@@ -438,7 +438,7 @@ classdef dynamicalSystem < handle
       plotStep2D(obj, posteriorType)
    end
    
-   methods (Access = protected, Hidden=true)
+   methods (Access = public, Hidden=true)
        parameterLearningMStep(obj, updateOnly, opts); % internals for EM
        ok  = validationInference(obj, doError); % Input validation
        out = parameterHash(obj);

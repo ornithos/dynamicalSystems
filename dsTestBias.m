@@ -104,7 +104,7 @@ end
 
 %% visualise predictions
 figure;
-h = plot(1,1);
+plthdl = plot(1,1);
 testpredahead = [1, 10, 20, Inf];
 
 cols          = zeros(3,3);
