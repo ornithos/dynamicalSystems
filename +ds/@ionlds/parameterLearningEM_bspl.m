@@ -89,17 +89,28 @@ nonlinOpts.display          = 'none';   %'iter-detailed'; %'none';
 nonlinOpts.large_iter       = 400;      % initial # BFGS iterations
 nonlinOpts.small_iter       = 100;      % subsequent # iterations - only small mvmts required.
 nonlinOpts.optimType        = 'fminunc';
-nonlinOpts.chgEtas          = true(1, numel(obj.par.emiNLParams.bspl.t));  % default change all etas
+nonlinOpts.chgEtas          = true(1, numel(obj.par.emiNLParams.bspl.t)-2);  % default change all etas
 nonlinOpts.etaUB            = [];
 nonlinOpts.bfgsSpline       = false;
 nonlinOpts.monotoneWarning  = true;
 nonlinOpts.dbgVisualisation = false;
+nonlinOpts.fixC             = false;
+nonlinOpts.fixEta           = false;
 nonlinOpts                  = utils.struct.structCoalesce(opts.nonlinOptimOpts, nonlinOpts);
 
 % ensure no bad combinations
 if strcmp(nonlinOpts.optimType, 'fmincon') && ~nonlinOpts.bfgsSpline
-    error(['This is a stupid request (optimType = fmincon, bfsSpline = false)!', ...
+    error(['Bad option specification: request (optimType = fmincon, bfgsSpline = false). ', ...
         'Only the spline coefficients are constrained, so fmincon will needlessly slow everything down.']);
+end
+if nonlinOpts.fixC && nonlinOpts.bfgsSpline
+    error(['Bad option specification: request (fixC = true, bfgsSpline = true). ', ...
+        'Only the spline coefficients are optimised, which can be done more efficiently by QP. Use bfgsSpline = false.']);
+end
+if nonlinOpts.fixEta; nonlinOpts.bfgsSpline = false; end
+if nonlinOpts.fixEta && strcmp(nonlinOpts.optimType, 'fmincon')
+    warning(['Bad option specification: request (fixEta = true, optimType = fmincon). ', ...
+        'Only the linear emission transformation is optimised, which is unconstrained. Use optimType = fminunc instead.']);
 end
 
 % transform eta --> theta (hat). Used for optimisation object x0.
@@ -119,7 +130,8 @@ adaptU             = u(:, nonlinOpts.chgEtas);
 nChgEtas           = sum(nonlinOpts.chgEtas);
 
 % Set up optimisation object for fminunc / fmincon.
-assert(ismember(nonlinOpts.optimType, {'fminunc', 'fmincon'}), 'optimType must be ''fminunc'' or ''fmincon''');
+assert(ismember(nonlinOpts.optimType, {'fminunc', 'fmincon'}), 'optimType must be ''fminunc'', ''fmincon''');
+
 optimOpts          = optimoptions(nonlinOpts.optimType, 'Display', nonlinOpts.display, ...
                                     'SpecifyObjectiveGradient', true, 'CheckGradients', false, 'MaxFunEvals', nonlinOpts.large_iter);
 if strcmp(nonlinOpts.optimType, 'fminunc')
@@ -150,6 +162,7 @@ end
 
 % for ease of reference, add chgEtas to workspace.
 chgEtas            = nonlinOpts.chgEtas;
+
 
 %%
 % remove linear updates where non-linear function
@@ -330,7 +343,7 @@ for ii = 1:opts.maxiter
         fprintf('\n');
         iterBar.currOutputLen = 0;
     end
-    
+
     % set number of optimisation iterations
     if ii <= 3 || ii == opts.maxiter
         optimOpts = optimoptions(optimOpts, 'MaxFunEvals', nonlinOpts.large_iter);
@@ -338,20 +351,21 @@ for ii = 1:opts.maxiter
         optimOpts = optimoptions(optimOpts, 'MaxFunEvals', nonlinOpts.small_iter);
     end
     optimEmi.options = optimOpts;
-      
-    if opts.dbg; [F,~,q] = obj.expLogJoint_bspl('freeEnergy', true); end
-    
-    % Perform optimisation
-    if strcmp(nonlinOpts.optimType , 'fminunc')
-        emiOptOut     = fminunc(optimEmi);  % <- magic happens here
-    else
-        emiOptOut     = fmincon(optimEmi);
-    end
-    optimEmi.x0   = emiOptOut;
-    
-    % update parameters from optimisation search
-    ds.utilIONLDS.updateParams_bspl(obj, emiOptOut, chgEtas, 'logSpace', logSpace);
 
+    if opts.dbg; [F,~,q] = obj.expLogJoint_bspl('freeEnergy', true); end
+
+    % Perform optimisation
+    if ~nonlinOpts.fixC
+        if strcmp(nonlinOpts.optimType , 'fminunc')
+            emiOptOut     = fminunc(optimEmi);  % <- magic happens here
+        elseif strcmp(nonlinOpts.optimType , 'fmincon')
+            emiOptOut     = fmincon(optimEmi);
+        end
+        optimEmi.x0   = emiOptOut;
+
+        % update parameters from optimisation search
+        ds.utilIONLDS.updateParams_bspl(obj, emiOptOut, chgEtas, 'logSpace', logSpace);
+    end
 %     % test gradients (orig file vs monotonic file are same)
 %     [fMono,gradMono] = ds.utilIONLDS.bsplineGradMono(obj, []);
 %     [fOrig,gradOrig] = ds.utilIONLDS.bsplineGrad(obj, []);
@@ -359,7 +373,7 @@ for ii = 1:opts.maxiter
 %     assert(max(max(abs(gradMono.eta - gradOrig.eta))) < 1e-10, 'eta grad differences > 1e-10');
 %     assert(max(max(abs(gradMono.C - gradOrig.C))) < 1e-10, 'C grad differences > 1e-10');
 %     assert(max(max(abs(gradMono.bias - gradOrig.bias))) < 1e-10, 'bias grad differences > 1e-10');
-    
+
     % DEBUG VISUALISATION
     if nonlinOpts.dbgVisualisation
         figure
@@ -370,9 +384,9 @@ for ii = 1:opts.maxiter
             plot(bsxfun(@plus, obj.par.emiNLParams.C(zzz,:)*obj.infer.smooth.mu, obj.par.emiNLParams.bias(zzz)), obj.y(zzz,:), '*'); hold off; 
         end
     end
-    
+
     % if optimising spline outside of BFGS, solve small QP.
-    if ~nonlinOpts.bfgsSpline
+    if ~nonlinOpts.bfgsSpline && ~nonlinOpts.fixEta
         obj.smooth(opts.filterType, opts.utpar, fOpts);
         qpopts                              = optimoptions('quadprog', 'Display', 'none');
         eta0                                = exp(reshape(emiOptOut(1:nChgEtas*obj.d.y),obj.d.y,nChgEtas))';
@@ -387,14 +401,15 @@ for ii = 1:opts.maxiter
         obj.par.emiNLParams.eta(:,chgEtas)  = cumsum(reshape(eta, nChgEtas, obj.d.y), 1)';
         tfeta                               = reshape(log(eta), nChgEtas, obj.d.y)';
         optimEmi.x0(1:obj.d.y*nChgEtas) = tfeta(:);
-    
-    
+
+
 %         figure
 %         for zzz = 1:2
 %             subplot(1,2,zzz); plot(xtmp, obj.par.emiNLParams.bspl.functionEval(xtmp, obj.par.emiNLParams.eta(zzz,:))); hold on; 
 %             plot(bsxfun(@plus, obj.par.emiNLParams.C(zzz,:)*obj.infer.smooth.mu, obj.par.emiNLParams.bias(zzz)), obj.y(zzz,:), '*'); hold off; 
 %         end
     end
+    % ---------- /END (Maximise H (Eta, C, bias)) ------------------------
     
     if opts.dbg
         [F1,~,q1] = obj.expLogJoint_bspl('freeEnergy', true);
