@@ -2,6 +2,9 @@ classdef dynamicalSystemBatchPars
     % exists soleley for use with dynamicalSystemBatch - allows overloading
     % of parameter struct fields so as to update each dynamicalSystem
     % within a dynamicalSystemBatch collection.
+    %
+    % REENGINEERED dynamicalSystemBatch ==> THIS IS NOW DEPRECATED!
+    %
     
     properties (GetAccess = private)
         dsBatchObj
