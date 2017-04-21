@@ -36,12 +36,12 @@ if opts.ssid
 %         obj.smooth;
 %     end
 else
-    var_y   = var(obj.y);
+%     var_y   = var(obj.y);
     if isempty(obj.par.A)
         obj.par.A = eye(obj.d.x);
     end
     if isempty(obj.par.Q)
-        obj.par.Q = var_y*eye(obj.d.x)/10;
+        obj.par.Q = eye(obj.d.x)/10;
     end
     if isempty(obj.par.H)
         obj.par.H = eye(obj.d.x);

@@ -21,7 +21,7 @@ if nargin < 2 || isempty(opts)
     opts = struct;
 end
 
-optsDefault  = struct('verbose', true, 'bIgnoreHash', false, 'anneal', 1);
+optsDefault  = struct('verbose', true, 'bIgnoreHash', false, 'anneal', 1, 'infer', false);
 opts         = utils.base.parse_argumentlist(opts, optsDefault);
     
 % Check for existence of Smoothed estimates
@@ -136,7 +136,9 @@ if any(obj.hasControl)
     s.XU      = (s.Xm1Um1.*T + mu(:,T+1) * U(:,T+1)')./(T);  
 end
 
-s.infer = struct('mu', mu); s.infer.P = sigma; s.infer.G = G;   % hack to stop MATLAB making a struct array
+if opts.infer
+    s.infer = struct('mu', mu); s.infer.P = sigma; s.infer.G = G;   % hack to stop MATLAB making a struct array
+end
 
 yActvP1           = find(yActv)+1;
 s.emissions       = struct('Ymu',  mean(y(:,yActv), 2));

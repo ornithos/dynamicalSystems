@@ -444,7 +444,7 @@ classdef dynamicalSystem < handle
        out = parameterHash(obj);
    end
    
-   methods (Access = private)
+   methods (Access = protected)
 
              %% ---- Save stack handlers -----------------------
       function stackPush(obj, insertion, descr)

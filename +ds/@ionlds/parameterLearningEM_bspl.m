@@ -499,7 +499,7 @@ end
 
 
 function [A, optCode] = stabiliseA_constraintGeneration(obj, prvEstimate, verbose)
-    s         = obj.suffStats(struct('bIgnoreHash', true));
+    s         = obj.suffStats(struct('bIgnoreHash', true, 'infer', true));
     m         = obj.infer.smooth.mu;
     S1        = m(:,1:end-1);
     S2        = m(:,2:end);

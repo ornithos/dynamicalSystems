@@ -146,7 +146,7 @@ function processInputArgs(obj, args)
         end
         
         % Check for known problems
-        if any(any(obj.y)) && obj.hasControl(2)
+        if any(any(isnan(obj.y))) && obj.hasControl(2)
             warning('caveat emptor: NaNs not handled yet in EM learning for emission control input. Use EM with EXTREME CAUTION (ie don''t).');
         end
 end
@@ -396,8 +396,6 @@ function obj = internalProcessControl(obj, arg)
             error('control input %d must be numeric matrix or scalar logical', ii);
         end
     end
-    
-    obj.par.uu        = u * u';
    
 end
 
