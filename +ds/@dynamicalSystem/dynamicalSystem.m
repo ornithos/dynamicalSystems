@@ -170,8 +170,9 @@ classdef dynamicalSystem < handle
           if nargin < 2; nlookahead = 0; end
           obj.ensureInference('PREDVALS', 'filter');
           
-          if nlookahead == -Inf
-              fitted = getFittedValues(obj);
+          if isinf(nlookahead)
+              if nlookahead < 0; fitted = obj.getFittedValues; end
+              if nlookahead > 0; fitted = obj.getPredictFreeRun(1); end
               return;
           end
           assert(nlookahead >= 0, 'lagged smoothing values not implemented. Try nlookahead=-Inf for Smoothed');
@@ -293,6 +294,7 @@ classdef dynamicalSystem < handle
           obj.stackDelete(obj.stackFind(tmpsvName));  % belt-and-braces
       end
       
+
       %% -----  Other utils ------------------------
       % --- (NL) functions ---------------
       function [fe, Dfe, he, Dhe] = functionInterfaces(obj)

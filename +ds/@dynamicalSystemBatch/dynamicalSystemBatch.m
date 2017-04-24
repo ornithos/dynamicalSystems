@@ -14,6 +14,10 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
     % cell containing multiple copies of time series with assumed same
     % parameters.
     
+    properties (Dependent)
+        ambientDimension
+    end
+    
     methods
         function obj = dynamicalSystemBatch(varargin)
             
@@ -98,10 +102,12 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             if nargin < 2; nlookahead = 0; end
             obj.ensureInference('PREDVALS', 'filter');
         
-            if nlookahead == -Inf
-                fitted = getFittedValues(obj);
-                return;
+            if isinf(nlookahead)
+              if nlookahead < 0; fitted = obj.getFittedValues; end
+              if nlookahead > 0; fitted = obj.getPredictFreeRun(1); end
+              return;
             end
+            
             assert(nlookahead >= 0, 'lagged smoothing values not implemented. Try nlookahead=-Inf for Smoothed');
             
             %if ~obj.emiLinear; [~,~,h,Dh]     = obj.functionInterfaces; nlpars.f = h; nlpars.Df = Dh; end
@@ -110,7 +116,7 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             fitted = cell(obj.d.n, 1);
             for nn = 1:obj.d.n
                 cFit      = zeros(obj.d.y, obj.d.T(nn) - nlookahead);
-                for tt = 1:obj.d.T - nlookahead
+                for tt = 1:obj.d.T(nn) - nlookahead
                     x_t = obj.infer.filter.mu{nn}(:,tt);
                     u_t = [];
                     if any(obj.hasControl); u_t = obj.u{nn}(:,tt); end
@@ -134,25 +140,29 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
         function predict = getPredictFreeRun(obj, t, l, utpar)
             % predict from (time t), (l datapoints) forward
             if nargin < 2; t = 1; end
-            assert(utils.is.scalarint(t) && t > 0 && t <= obj.d.T, 't must be a scalar int in 1,...,T');
+            assert(all(arrayfun(@(x) utils.is.scalarint(x, 1), t)) && all(t <= obj.d.T), 't must be scalar in 1, ..., T');
+            if numel(t) == 1 && obj.d.n > 1; t = repmat(t, obj.d.n, 1); end
             if nargin < 3
-            	if t == obj.d.T; error('length of output l must be specified'); end
+            	if all(t == obj.d.T); error('length of output l must be specified'); end
                 l = obj.d.T - t; 
+            else
+                if numel(l) == 1; l = repmat(l, obj.d.n, 1); end
+                assert(numel(l) == obj.d.n, 'l must have either 1 or %d elements', obj.d.n);
             end
-            assert(utils.is.scalarint(l) && l > 0, 'l must be a positive scalar int');
+            assert(all(arrayfun(@(x) utils.is.scalarint(x, 1), l)), 'l must be a positive scalar int');
             obj.ensureInference('PREDVALS', 'filter');
 
             doLinOrEKF = nargin < 4 || isempty(utpar);
             
             predict = cell(obj.d.n, 1);
             for nn = 1:obj.d.n
-                if ~doLinOrEKF; P = obj.infer.filter.sigma{nn}{t+1}; end
+                if ~doLinOrEKF; P = obj.infer.filter.sigma{nn}{t(nn)+1}; end
 
-                cPred = NaN(obj.d.y, t+l);
-                x_t = obj.infer.filter.mu{nn}(:, t);
-                for tt = t+1:t+l
-                    if tt <= obj.d.T && any(obj.hasControl)
-                        u_t = obj.u(:,tt); 
+                cPred = NaN(obj.d.y, t(nn)+l(nn));
+                x_t = obj.infer.filter.mu{nn}(:, t(nn));
+                for tt = t(nn)+1:t(nn)+l(nn)
+                    if tt <= obj.d.T(nn) && any(obj.hasControl)
+                        u_t = obj.u{nn}(:,tt); 
                     else
                         u_t = 0;
                     end
@@ -199,6 +209,10 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
       
         
         %% MISC FUNCTIONS
+        
+        function value = get.ambientDimension(obj)
+            value = cellfun(@(x) sum(~all(isnan(x),2)), obj.y);
+        end
 %         
 %         function out = n(obj)
 %             out = numel(obj.dsArray);

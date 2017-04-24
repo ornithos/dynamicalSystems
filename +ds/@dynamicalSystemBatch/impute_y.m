@@ -89,7 +89,7 @@ function [y, covY] = impute_y(obj, varargin)
 
             if doUKF; [~,~,h,~]    = obj.functionInterfaces; end
 
-            covY{nn} = repmat({zeros(d)}, obj.d.T,1);
+            covY{nn} = repmat({zeros(d)}, obj.d.T(nn),1);
             for tt = find(anyMissing)
                 if ~doUKF
                     covY_tt  = obj.par.H * P{tt} * obj.par.H' + obj.par.R;

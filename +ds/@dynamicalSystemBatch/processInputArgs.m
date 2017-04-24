@@ -352,33 +352,29 @@ function [obj, doGenerate] = internalProcessDat(obj, arg)
         obj.d.T = arg{1};
         doGenerate = true;
     else
+        % if user supplies single time series in matrix, convert to cell.
         if isnumeric(arg{1})
             assert(ismatrix(arg{1}), 'Tensors not supported in ''data''. If multiple time series, use cell.');
-            obj.y = {arg{1}};
-            obj.d.T = size(arg{1}, 2);
-            obj.d.n = 1;
-            if obj.opts.warnings && size(obj.y,1) > obj.d.y
-                warning('more dimensions in observations than timepoints. y is (d x T) matrix.');
-            end
-        else
-            assert(iscell(arg{1}), 'observation data must be a cell of matrices');
-            obj.d.n   = numel(arg{1});
-            filledNaN = false;
-            for ii = 1:obj.d.n
-                cY     = arg{1}{ii};
-                assert(isnumeric(cY) && ismatrix(cY), '''data'' field: cell element %d not a numeric matrix.', ii);
-                assert(size(cY,1) <= obj.d.y, '''data'' field: cell element %d of greater dimension (%d) than specified (%d)', ii, size(cY,1), obj.d.y);
-                if obj.d.y > size(cY,1)
-                    filledNaN = true;
-                    arg{1}{ii} = [arg{1}{ii}; NaN(obj.d.y - size(cY,1), size(cY,2))];
-                end
-            end
-            if filledNaN && obj.opts.warnings
-                warning('Length of some data series is < dimy. Additional dimensions filled with NaN');
-            end
-            obj.y   = arg{1};
-            obj.d.T = cellfun(@(x) size(x,2), obj.y);
+            arg{1} = {arg{1}};
         end
+        % perform checks on all time series in cell.
+        assert(iscell(arg{1}), 'observation data must be a cell of matrices');
+        obj.d.n   = numel(arg{1});
+        filledNaN = false;
+        for ii = 1:obj.d.n
+            cY     = arg{1}{ii};
+            assert(isnumeric(cY) && ismatrix(cY), '''data'' field: cell element %d not a numeric matrix.', ii);
+            assert(size(cY,1) <= obj.d.y, '''data'' field: cell element %d of greater dimension (%d) than specified (%d)', ii, size(cY,1), obj.d.y);
+            if obj.d.y > size(cY,1)
+                filledNaN = true;
+                arg{1}{ii} = [arg{1}{ii}; NaN(obj.d.y - size(cY,1), size(cY,2))];
+            end
+        end
+        if filledNaN && obj.opts.warnings
+            warning('Length of some data series is < dimy. Additional dimensions filled with NaN');
+        end
+        obj.y   = arg{1};
+        obj.d.T = cellfun(@(x) size(x,2), obj.y);
     end
     
 end
@@ -391,7 +387,7 @@ function obj = internalProcessControl(obj, arg)
     u = arg{1};
     if isnumeric(u); u = {u}; end
     assert(iscell(u), 'control series u must be a cell array');
-    assert(obj.d.n == numel(u), '%d control series given for %d observation series', obj.d.n);
+    assert(obj.d.n == numel(u), '%d control series given for %d observation series', numel(u), obj.d.n);
     
     obj.d.u = size(u{1},1);
     

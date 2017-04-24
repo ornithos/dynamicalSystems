@@ -294,7 +294,7 @@ function [obj,tests] = internalProcessEmi(obj, arg)
             obj.par.emiNLParams = arg{ii};
             obj.emiNLhasParams = true;
         else
-            if isnumeric(arg{ii}) && isempty(obj.d.c)
+            if isnumeric(arg{ii}) && isempty(obj.par.c)
                 warning('Cannot parse argument %d in emission. If it is intended to be bias, ensure it is conformable to y');
             end
             error('Don''t know what to do with argument %d in Emission section', ii);
@@ -325,6 +325,7 @@ function [obj, doGenerate] = internalProcessDat(obj, arg)
         if obj.opts.warnings && size(obj.y,1) > obj.d.y
             warning('more dimensions in observations than timepoints. y is (d x T) matrix.');
         end
+        assert(size(obj.y, 1) == obj.d.y, 'observations are not of dimension dimy');
         if obj.opts.warnings && narg == 2
             if ~utils.base.isscalarint(arg{2})
                 warning('extraneous argument in data section is unexpected type (%s). Ignoring..', class(arg{2}))

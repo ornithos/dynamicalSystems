@@ -24,14 +24,14 @@
         'data', Ys, 'control', Us, true, false, opts);
     %%
     epsilon = 0.01;
-    opts = struct('maxiter', 10, 'epsilon', 5e-4, 'sampleStability', 5, ...
+    opts = struct('maxiter', 500, 'epsilon', 5e-4, 'sampleStability', 5, ...
            'multistep', 4, 'ssid', false, 'verbose', true, 'stableVerbose', false, ...
            'annealingSchedule', 0.1, 'annealingIter', 100, 'annealingMin', 1e-3, ...
            'diagA', true, 'diagQ', false, 'diagAconstraints', [-1+epsilon, 1-epsilon], 'fixBias2', true, 'strictNegativeCheck', false);
     llhhist = dsBatch.parameterLearningEM(opts);
-    dsLDS.filter([],true);
-    dsLDS.smooth;
-    dsLDS.save('initial');
+    dsBatch.filter([],true);
+    dsBatch.smooth;
+    dsBatch.save('initial');
     
     
     % visualise
