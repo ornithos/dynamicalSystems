@@ -167,8 +167,6 @@ s           = rmfield(sBatch, 'T');
 s.SIGMA     = s.SIGMA * divT;
 s.PHI       = s.PHI   * divT;
 s.C         = s.C     * divT;
-s.B         = s.B     * divT;
-s.D         = s.D     * divT;
 
 if obj.hasControl(1)
     s.X_Um1     = s.X_Um1 * divT;
@@ -186,6 +184,10 @@ if any(obj.hasControl)
 end
 
 divTy              = 1./s.emissions.Ty;
+
+s.B                 = s.B     * divTy;
+s.D                 = s.D     * divTy;
+
 s.emissions.Ymu    = s.emissions.Ymu * divTy;
 s.emissions.Umu    = s.emissions.Umu * divTy;
 s.emissions.Xmu    = s.emissions.Xmu * divTy;
