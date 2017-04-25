@@ -297,41 +297,45 @@ classdef dynamicalSystem < handle
 
       %% -----  Other utils ------------------------
       % --- (NL) functions ---------------
-      function [fe, Dfe, he, Dhe] = functionInterfaces(obj)
+      function [f, Df, h, Dh] = functionInterfaces(obj, returnAsStruct)
         % non-linear wrappers for common interface to fns
         if obj.evoNLhasParams
             if obj.hasControl(1)
-                fe = @(x,u) obj.par.f(x, u, obj.par.evoNLParams);
-                Dfe = @(x,u) obj.par.Df(x, u, obj.par.evoNLParams);
+                f = @(x,u) obj.par.f(x, u, obj.par.evoNLParams);
+                Df = @(x,u) obj.par.Df(x, u, obj.par.evoNLParams);
             else
-                fe = @(x,u) obj.par.f(x, obj.par.evoNLParams);
-                Dfe = @(x,u) obj.par.Df(x, obj.par.evoNLParams);
+                f = @(x,u) obj.par.f(x, obj.par.evoNLParams);
+                Df = @(x,u) obj.par.Df(x, obj.par.evoNLParams);
             end
         else
             if obj.hasControl(1)
-                fe = @(x,u) obj.par.f(x,u);
-                Dfe = @(x,u) obj.par.Df(x,u);
+                f = @(x,u) obj.par.f(x,u);
+                Df = @(x,u) obj.par.Df(x,u);
             else
-                fe = @(x,u) obj.par.f(x);
-                Dfe = @(x,u) obj.par.Df(x);
+                f = @(x,u) obj.par.f(x);
+                Df = @(x,u) obj.par.Df(x);
             end
         end
         if obj.emiNLhasParams
             if obj.hasControl(2)
-                he = @(x,u) obj.par.h(x, u, obj.par.emiNLParams);
-                Dhe = @(x,u) obj.par.Dh(x, u, obj.par.emiNLParams);
+                h = @(x,u) obj.par.h(x, u, obj.par.emiNLParams);
+                Dh = @(x,u) obj.par.Dh(x, u, obj.par.emiNLParams);
             else
-                he = @(x) obj.par.h(x, obj.par.emiNLParams);
-                Dhe = @(x) obj.par.Dh(x, obj.par.emiNLParams);
+                h = @(x) obj.par.h(x, obj.par.emiNLParams);
+                Dh = @(x) obj.par.Dh(x, obj.par.emiNLParams);
             end
         else
             if obj.hasControl(2)
-                he = @(x,u) obj.par.h(x,u);
-                Dhe = @(x,u) obj.par.Dh(x,u);
+                h = @(x,u) obj.par.h(x,u);
+                Dh = @(x,u) obj.par.Dh(x,u);
             else
-                he = @(x,u) obj.par.h(x);
-                Dhe = @(x,u) obj.par.Dh(x);
+                h = @(x,u) obj.par.h(x);
+                Dh = @(x,u) obj.par.Dh(x);
             end
+        end
+        if nargin > 1 && returnAsStruct
+            assert(nargout <= 1, 'too many outputs requested for returnAsStruct');
+            f = struct('f', f, 'Df', Df, 'h', h, 'Dh', Dh);
         end
       end
       

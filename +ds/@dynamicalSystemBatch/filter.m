@@ -75,8 +75,6 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
     if obj.evoLinear; fType1 = 0; end
     if obj.emiLinear; fType2 = 0; end
     
-    parPredict      = ds.internal.getParams(obj, 1, fType1);
-    parUpdate       = ds.internal.getParams(obj, 2, fType2);
     llh             = 0;
     d               = obj.d.y;
     if numel(opts.T) == 1; opts.T = repmat(opts.T, obj.d.n, 1); end
@@ -85,9 +83,14 @@ function D = filter(obj, fType, bDoLLH, utpar, opts)
     fMuCell         = cell(obj.d.n,1);
     fSigmaCell      = cell(obj.d.n,1);
     
+    fns             = obj.functionInterfaces(true);
+    
     for nn = 1:obj.d.n
         % initialise t-1 = 0 values to prior
         
+        parPredict      = ds.internal.getParams(obj, 1, fType1, fns, nn);
+        parUpdate       = ds.internal.getParams(obj, 2, fType2, fns, nn);
+    
         filterMu        = zeros(obj.d.x, T(nn));
         filterSigma     = cell(T(nn), 1);
         

@@ -1,4 +1,4 @@
-function par = getParams(obj, stage, type)
+function par = getParams(obj, stage, type, fns, nn)
     % par = getParams(obj, stage, type)
     % get parameters from dynamicalSystems object, either for transition
     % or emission stage.
@@ -7,6 +7,9 @@ function par = getParams(obj, stage, type)
     % obj     - a dynamicalSystems object
     % stage   - (1) = transition; (2) = emission.
     % type    - (0) = linear;     (2) = nonlinear.
+    % fns     - struct containing output of obj.functionInterfaces (used to
+    %           save time for repeated calling. OPTIONAL.)
+    % nn      - series number (if dsBatch object) - will error o.w.
     %
     % OUTPUTS:
     % A struct with the following fields:
@@ -16,7 +19,12 @@ function par = getParams(obj, stage, type)
     % {f, Df} - plant/emission function f and deriv Df.
     
     par = struct('control', false);
-    [f,Df,h,Dh]    = obj.functionInterfaces;
+    if nargin < 4 || isempty(fns)
+        returnAsStruct = true;
+        fns    = obj.functionInterfaces(returnAsStruct);
+    end
+    givenSeriesNN = nargin == 5 && ~isempty(nn);
+    
     if stage == 1
             par.Q = obj.par.Q;
             if type == 0
@@ -27,25 +35,34 @@ function par = getParams(obj, stage, type)
                 end
                 par.bias = zeros(obj.d.x, 1); %obj.par.b;
             else
-                par.f  = f;
-                par.Df = Df;
+                par.f  = fns.f;
+                par.Df = fns.Df;
             end
             
         elseif stage == 2
             par.Q = obj.par.R; % ok - Q refers to the covariance matrix regardless of stage.
             if type == 0
+                
+                % EVOLUTION AND CONTROL
                 par.A = obj.par.H; % ok - A refers to the transition/emission matrix regardless of stage.
                 if obj.hasControl(2)
                     par.B = obj.par.C;   % ok - B refers to the linear control matrix regardless of stage.
                 end
+                
+                % BIAS
                 if isempty(obj.par.c)
                     par.bias = zeros(obj.d.y, 1);
                 else
-                    par.bias = obj.par.c;
+                    if givenSeriesNN && iscell(obj.par.c)
+                        par.bias = obj.par.c{nn};
+                    else
+                        par.bias = obj.par.c;
+                    end
                 end
+                
             else
-                par.f  = h;
-                par.Df = Dh;
+                par.f  = fns.h;
+                par.Df = fns.Dh;
             end
         else
             error('Unknown stage requested. Try 1=prediction or 2=update');

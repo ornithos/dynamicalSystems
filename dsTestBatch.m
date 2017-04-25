@@ -17,6 +17,7 @@
     % NaN and (c) multiple time series. So not doing it.
     A        = diag(rand(ss, 1));
     H        = rand(os, ss)*2 - 1;
+    % ---> This bias 
     bias     = nanmean(cell2mat(cellfun(@(x) subsref([x; NaN], struct('type','()','subs',{{1:3}})), cellfun(@(x) nanmean(x(:,5:10), 2), Ys, 'Un', 0), 'Un', 0)'),2);
     
     dsBatch  = ds.dynamicalSystemBatch(ss, os, 'x0', zeros(ss,1), eye(ss)*1e-6, ...

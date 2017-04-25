@@ -74,7 +74,7 @@ function smooth(obj, sType, utpar, varargin)
     if obj.evoLinear; fType1 = 0; end
 %     if obj.emiLinear; fType2 = 0; end
     
-    parPredict   = ds.internal.getParams(obj, 1, fType1);
+    fns          = obj.functionInterfaces(true);
     
     hasControl   = any(obj.hasControl);
     
@@ -98,9 +98,11 @@ function smooth(obj, sType, utpar, varargin)
 
         bwdstart     = obj.d.T(nn)-1;   % usual case: no NaNs
 
-
+        parPredict   = ds.internal.getParams(obj, 1, fType1, fns, nn);
+        
         %% -- Main Loop --
         for tt = bwdstart:-1:1
+            
             % Prediction step
             if hasControl
                 u_t = obj.u{nn}(:,tt+1);   %tt=T-1 => u_{T} because [N(Ax_t-1 + Bu_t, Q)]

@@ -71,13 +71,13 @@ function [y, covY] = impute_y(obj, varargin)
             if obj.hasControl(2); u_t = obj.u{nn}(:,tt); end
             if ~opts.sample
                 if ~doUKF
-                    yhat_tt  = obj.doEmission(xhat(:,tt), u_t);
+                    yhat_tt  = obj.doEmission(xhat(:,tt), u_t, [], [], nn);
                 else
-                    yhat_tt  = obj.doEmission(xhat(:,tt), u_t, P{tt}, opts.utpar);
+                    yhat_tt  = obj.doEmission(xhat(:,tt), u_t, P{tt}, opts.utpar, nn);
                 end
             else
                 tmpx     = xhat(:,tt) + chol(P{tt})' * randn(obj.d.x, 1);
-                yhat_tt  = obj.doEmission(tmpx, u_t) + cholR' * randn(obj.d.y, 1);
+                yhat_tt  = obj.doEmission(tmpx, u_t, [], [], nn) + cholR' * randn(obj.d.y, 1);
             end
             mask            = missing(:,tt);
             y{nn}(mask,tt)  = yhat_tt(mask);

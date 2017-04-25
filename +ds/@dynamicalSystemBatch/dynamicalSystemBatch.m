@@ -54,7 +54,7 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
                     u_t = [];
                     if any(obj.hasControl); u_t = obj.u{nn}(:,tt); end
                     xx(:,tt+1)     = obj.doTransition(xx(:,tt), u_t) + transChol * randn(obj.d.x,1);
-                    yyHat(:,tt)    = obj.doEmission(xx(:,tt+1), u_t);
+                    yyHat(:,tt)    = obj.doEmission(xx(:,tt+1), u_t, [], [], nn);
                     yy(:,tt)       = yyHat(:,tt) + emissChol * randn(obj.d.y,1);
                 end
                 
@@ -85,9 +85,9 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
                     u_t = [];
                     if any(obj.hasControl); u_t = obj.u{nn}(:,tt); end
                     if nargin < 2 || isempty(utpar)
-                        cFit(:,tt) = obj.doEmission(obj.infer.smooth.mu{nn}(:,tt), u_t);
+                        cFit(:,tt) = obj.doEmission(obj.infer.smooth.mu{nn}(:,tt), u_t, [], [], nn);
                     else
-                        cFit(:,tt) = obj.doEmission(obj.infer.smooth.mu{nn}(:,tt), u_t, obj.infer.smooth.sigma{nn}{tt}, utpar);
+                        cFit(:,tt) = obj.doEmission(obj.infer.smooth.mu{nn}(:,tt), u_t, obj.infer.smooth.sigma{nn}{tt}, utpar, nn);
                     end
                 end
                 fitted{nn} = cFit;
@@ -128,9 +128,9 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
                         if ~doLinOrEKF; P = obj.par.A*P*obj.par.A' + obj.par.Q; end
                     end
                     if doLinOrEKF
-                        cFit(:,tt) = obj.doEmission(x_t, u_t);
+                        cFit(:,tt) = obj.doEmission(x_t, u_t, [], [], nn);
                     else
-                        cFit(:,tt) = obj.doEmission(x_t, u_t, P, utpar);
+                        cFit(:,tt) = obj.doEmission(x_t, u_t, P, utpar, nn);
                     end
                 end
                 fitted{nn} = cFit;
@@ -169,9 +169,9 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
                     x_t                 = obj.doTransition(x_t, u_t);
                     if ~doLinOrEKF; P = obj.par.A*P*obj.par.A' + obj.par.Q; end
                     if doLinOrEKF
-                        cPred(:,tt) = obj.doEmission(x_t, u_t);
+                        cPred(:,tt) = obj.doEmission(x_t, u_t, [], [], nn);
                     else
-                        cPred(:,tt) = obj.doEmission(x_t, u_t, P, utpar);
+                        cPred(:,tt) = obj.doEmission(x_t, u_t, P, utpar, nn);
                     end
                 end
                 predict{nn} = cPred;
@@ -212,6 +212,9 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
         
         function value = get.ambientDimension(obj)
             value = cellfun(@(x) sum(~all(isnan(x),2)), obj.y);
+        end
+        function set.ambientDimension(obj, val)   %#ok
+            % do nothing! Critical for on copy properties.
         end
 %         
 %         function out = n(obj)
@@ -272,5 +275,46 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
 %             end
 %         end
 
+    end
+    
+    methods (Access = protected)
+               % ---- Dynamics wrappers --------------------------
+%         function out = doTransition(obj, input, u)
+%            
+%             if obj.evoLinear
+%                   out        = obj.par.A * input;
+%                   if obj.hasControl(1); out = out + obj.par.B * u; end
+%             else
+%                 [f,~,~,~]    = obj.functionInterfaces;
+%                 if ~obj.hasControl(1), out = f(input);
+%                 else, out = f(input, u); end
+%             end
+%         end
+        
+        function out = doEmission(obj, input, u, P, utpar, nn)
+            b       = zeros(obj.d.y, 1);
+            if ~isempty(obj.par.c)
+                if iscell(obj.par.c) && nargin == 6 && ~isempty(nn)
+                    b = obj.par.c{nn}; 
+                else
+                    b = obj.par.c;
+                end
+            end
+            if obj.emiLinear
+                 out = obj.par.H * input + b;
+                 if obj.hasControl(2); out = out + obj.par.C * u; end
+            else
+                [~,~,h,~]    = obj.functionInterfaces;
+                if nargin >= 5 && ~isempty(utpar)
+                    nlpars.f = h;
+                    nlpars.Q = 0;
+                    out   = ds.utils.assumedDensityTform(nlpars, input, P, u, 2, utpar);
+                else
+                    if ~obj.hasControl(2); out   = h(input);
+                    else, out = h(input, u); end
+                end
+            end
+        end
+        % ------------------------------------------------
     end
 end
