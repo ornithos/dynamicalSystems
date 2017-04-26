@@ -9,8 +9,11 @@ optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL'
                         'annealingSchedule', Inf, 'annealingIter', 10, ...
                         'annealingMin', 1e-6, 'strictNegativeCheck', false, ...
                         'filterType', 'linear', 'utpar', struct, 'fixX0', true);
-optsDefault     = utils.base.parse_argumentlist(obj.opts, optsDefault, false);      % bring in global opts
-opts            = utils.base.parse_argumentlist(opts, optsDefault, false);          % add user specified opts.
+mstepDefault    = struct('fixA', false, 'fixB', false, 'fixQ', false, 'fixH', false, ...
+                        'fixD', false, 'fixR', false);
+optsDefault     = utils.struct.structCoalesce(optsDefault, mstepDefault, false);    % bring in mstep opts
+optsDefault     = utils.struct.structCoalesce(obj.opts, optsDefault, false);        % bring in global opts
+opts            = utils.base.parse_argumentlist(opts, optsDefault, true);          % add user specified opts.
 
 sing_val_eps    = 0.004999999999;  % tolerance of singular values of A > 1. This value
                                    % is given in in Sidiqqi et als code for constraint
@@ -75,11 +78,13 @@ fOpts      = struct('bDoValidation', false, 'bIgnoreHash', true, 'forceFilter', 
 mstepOpts  = struct('verbose', opts.dbg, 'diagQ', opts.diagQ, 'diagR', opts.diagR, ...
                  'diagA', opts.diagA, 'diagAconstraints', opts.diagAconstraints, 'fixBias2', opts.fixBias2);
 optFds     = fieldnames(opts);
-for oname = optFds   % fixA, fixQ, fix....
-    if strcmp(oname(1:3), 'fix')
-        mstepOpts.(oname) = opts.(oname);
+for oname = optFds'   % fixA, fixQ, fix....
+    if strcmp(oname{1}(1:3), 'fix') && opts.(oname{1})
+        mstepOpts.(oname{1}) = opts.(oname{1});
     end
 end
+
+if isfield(mstepOpts, 'fixX0'); mstepOpts = rmfield(mstepOpts, 'fixX0'); end   % not handled in mstep.
 
 % remove linear updates where non-linear function
 if ~obj.evoLinear

@@ -50,8 +50,9 @@ function parameterLearningMStep(obj, updateOnly, opts)
             end
         end
     end
+    updateBias2 =  isfield(opts, 'fixBias2') && ~opts.fixBias2;
     
-    if isempty(updateOnly)
+    if isempty(updateOnly) && ~updateBias2
         if opts.verbose
             fprintf('M-step: No non-fixed quantities in %s to update. Exiting...\n', strjoin(origUpdates, ', '));
         end
@@ -180,7 +181,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
     % This got messy fast. I'm pretty sure without fixBias2 on, the updates
     % are ok (although not totally), but if fixBias2, all bets are off..
     matchesHC = ismember({'H','C'}, updateOnly);
-    if any(matchesHC)
+    if any(matchesHC) || updateBias2
         s2 = s.emissions;
         
         HCopts = struct;
@@ -195,7 +196,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
             if HCopts.C
                 if HCopts.bias
                     % H && C && bias 
-                    numer     = [s.B, s.YU, s2.Ymu];
+                    numer     = [s.B, s2.YU, s2.Ymu];
                     denom     = [s2.SIGMA, s2.XU, s2.Xmu;   s2.XU', s2.UU, s2.Umu;   s2.Xmu', s2.Umu', 1];
                     result    = numer / denom;
                     obj.par.H = result(:, 1:obj.d.x);
@@ -204,9 +205,9 @@ function parameterLearningMStep(obj, updateOnly, opts)
                 else
                     % H && C && ____
                     if ~HCopts.hasBias
-                        numer     = [s.B, s.YU];
+                        numer     = [s.B, s2.YU];
                     else
-                        numer     = [(s.B - obj.par.c * [s2.Xmu', s2.Umu']), s.YU];
+                        numer     = [(s.B - obj.par.c * [s2.Xmu', s2.Umu']), s2.YU];
                     end
                     denom     = [s2.SIGMA, s2.XU;   s2.XU', s2.UU];
                     result    = numer / denom;
@@ -253,16 +254,17 @@ function parameterLearningMStep(obj, updateOnly, opts)
                 end
             end
         else
+            if HCopts.C
                 if HCopts.bias
-                    % H && C && bias 
-                    numer     = [(s.YU - obj.par.H * s2.XU), s2.Ymu];
+                    % _ && C && bias 
+                    numer     = [(s2.YU - obj.par.H * s2.XU), s2.Ymu];
                     denom     = [s2.UU, s2.Umu;   s2.Umu', 1];
                     result    = numer / denom;
                     obj.par.C = result(:, 1:obj.d.u);
                     obj.par.c = result(:, end);
                 else
-                    % H && C && ____
-                    numer     = s.YU - obj.par.H * s2.XU;
+                    % _ && C && ____
+                    numer     = s2.YU - obj.par.H * s2.XU;
                     if HCopts.hasBias
                         numer = numer - obj.par.c * s2.Umu';
                     end
@@ -270,6 +272,17 @@ function parameterLearningMStep(obj, updateOnly, opts)
                     result    = numer / denom;
                     obj.par.C = result(:, 1:obj.d.u);
                 end
+            else
+                if HCopts.bias
+                    if HCopts.control
+                        % _ && _ && bias && control
+                        error('Not implemented this combination: fix H, fix C, change bias, has control');
+                    else
+                        % _ && _ && bias && ______
+                        obj.par.c = s2.Ymu - obj.par.H * s2.Xmu;
+                    end
+                end
+            end
         end
         
     end
