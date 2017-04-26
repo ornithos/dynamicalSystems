@@ -1,4 +1,4 @@
-function predictions(obj, pwindows, horizOverlay, titlePrefix)
+function predictions(obj, pwindows, horizOverlay, varargin)
 % plot.predictions(obj, pwindows, horizOverlay, titlePrefix)
 % plot prediction of dynamicalSystem object
 %
@@ -11,6 +11,8 @@ function predictions(obj, pwindows, horizOverlay, titlePrefix)
 
       % Setup
       assert(isa(obj, 'ds.dynamicalSystem'), 'input object not a dynamicalSystems object');
+      isBatch       = isa(obj, 'ds.dynamicalSystemBatch');
+      
       if nargin < 2 || isempty(pwindows)
           pwindows = 1;
       end
@@ -26,11 +28,17 @@ function predictions(obj, pwindows, horizOverlay, titlePrefix)
           end
       end
 
-      if nargin < 4
-          titlePrefix = '';
+      optsDefault.titlePrefix = '';
+      if isBatch
+        optsDefault.nn        = 1:obj.d.n;
+      else
+        optsDefault.nn        = 1;
       end
+      optsDefault.verbose     = true;
+      optsDefault.figure      = [];
+      opts           = utils.base.processVarargin(varargin, optsDefault);
           
-      isBatch       = isa(obj, 'ds.dynamicalSystemBatch');
+      
           
       cols          = zeros(obj.d.y,3);
       cnums         = [2 4 5 3 6 7 1];
@@ -38,34 +46,39 @@ function predictions(obj, pwindows, horizOverlay, titlePrefix)
       litecols      = utils.plot.colortint(cols, 0.5);
 
       %% Plot
-      figure;
+      if isempty(opts.figure)
+          figure;
+      else
+          figure(opts.figure);
+      end
+      
       nPreds        = numel(pwindows);
       spdims        = utils.plot.subplotdims(nPreds);
 
       % get data
-      if isBatch; fprintf('Calculating: fitted ys...'); end
-      [impy, impPy] = obj.impute_y('variance', true, 'smooth', true);
+      if isBatch && opts.verbose; fprintf('Calculating: fitted ys...'); end
+      [impy, impPy] = obj.impute_y('variance', true, 'smooth', true, 'nRng', opts.nn);
       predvals      = cell(nPreds,1);
       
-      if isBatch; fprintf('\b\b\b, predicted values, ...'); end
+      if isBatch && opts.verbose; fprintf('\b\b\b, predicted values, ...'); end
       for jj = 1:nPreds
-          predvals{jj} = obj.getPredictedValues(pwindows(jj));
+          predvals{jj} = obj.getPredictedValues(pwindows(jj), [], opts.nn);
+          if ~isBatch; predvals{jj} = {predvals{jj}}; end
       end
-      if isBatch; fprintf('\b\b\b\b\b. Done.'); end
+      if isBatch && opts.verbose; fprintf('\b\b\b\b\b. Done.\n'); end
       
       % data may be cell if dsBatch
       if isBatch
-          nModels = obj.d.n;
           y       = obj.y;
           d       = obj.ambientDimension;
       else
-          nModels = 1;
+          opts.nn = 1;
           impy = {impy}; impPy = {impPy}; y = {obj.y};
           horizOverlay = {horizOverlay};
           d       = obj.d.y;
       end
       
-      for nn = 1:nModels
+      for nn = opts.nn
           for jj = 1:nPreds
               subplot(spdims(1), spdims(2), jj);
 
@@ -95,15 +108,15 @@ function predictions(obj, pwindows, horizOverlay, titlePrefix)
                   utils.plot.dataShadeVertical(1:(obj.d.T(nn)), horizOverlay{nn}, cmap, 'edgedetect', 'manual', 'edgemanual', 3);
               end
               
-              if nModels > 1
+              if numel(opts.nn) > 1
                   idtxt = sprintf('Series %d', nn);
               else
                   idtxt = '';
               end
-              title(sprintf('%s%s (%d-step). Average SMSE %.2f%%', titlePrefix, idtxt, pwindows(jj), nanmean(smse)*100));
+              title(sprintf('%s%s (%d-step). Average SMSE %.2f%%', opts.titlePrefix, idtxt, pwindows(jj), nanmean(smse)*100));
           end
           
-          if nn < nModels
+          if nn < opts.nn(end)
               pause;
           end
       end
