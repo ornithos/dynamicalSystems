@@ -81,6 +81,7 @@
     dsBatchBiasCov       = dsBatch.copy;
     dsBatchBiasCov.par.c = mat2cell(covBiases, 3, ones(1,40));
     llhhist = dsBatchBiasCov.parameterLearningEM(opts);
+    dsBatchBiasCov.save('adapted2covs');
     
 %% Compare predictions
 batchTable = table;
@@ -118,5 +119,54 @@ end
 for nn = 1:40
     ds.plot.predictions(dsBatchBiasCov, [1,10,20,Inf], pump.target, 'nn', nn, 'titlePrefix', sprintf('Patient %d',nn), 'verbose', false, 'figure', figh1); 
     ds.plot.predictions(dsBatch, [1,10,20,Inf], pump.target, 'nn', nn, 'titlePrefix', sprintf('Patient %d',nn), 'verbose', false, 'figure', figh2);
+    pause
+end
+
+
+    %% LEARN individual biases! (this is a little hacky, although pretty sure this is the correct M step)
+    % Iterate:
+    %  * For each series
+    %     1) Extract pars from batch.
+    %     2) Create LDS object.
+    %     3) Learn *ONLY* bias, keeping other pars the same.
+    %     4) Re-attach the bias to the batch object.
+    %  * Perform a few steps of EM with the new bias in batch (keeping bias fixed).
+    %
+    
+    dims     = dsBatchBiasCov.ambientDimension;
+    p        = dsBatchBiasCov.par;
+    
+    outerEMopts = struct('maxiter', 3, 'epsilon', 5e-4, 'sampleStability', 5, ...
+           'multistep', 4, 'ssid', false, 'verbose', true, 'diagA', true, ...
+           'diagQ', false, 'diagAconstraints', [-1+epsilon, 1-epsilon], 'fixBias2', true);
+       
+    ldsEMopts = struct('maxiter', 1, 'ssid', false, 'verbose', false, 'fixBias2', false, ...
+                      'fixA', true, 'fixQ', true, 'fixB', true, 'fixH', true, 'fixR', true);
+    ldsOpts   = struct('warnings', false, 'verbose', false);
+    
+    for ii = 1:100
+        pb       = utils.base.objProgressBar(sprintf('(%d) finding new biases: ',ii), 20, 'showPct', true, 'showElapsed', true); 
+        for nn = 1:40
+            ss    = 4;
+            tmpDS = ds.dynamicalSystem(ss, dims(nn), 'x0', zeros(ss,1), eye(ss)*1e-6, ...
+                'evolution', p.A, p.Q, 'emission', p.H(1:dims(nn),:), p.R(1:dims(nn),1:dims(nn)), p.c{nn}(1:dims(nn)), ...
+                'data', dsBatchBiasCov.y{nn}(1:dims(nn),:), 'control', dsBatchBiasCov.u{nn}, p.B, false, ldsOpts);
+            tmpDS.parameterLearningEM(ldsEMopts);
+            newBias = tmpDS.par.c;
+            if dims(nn) < 3; newBias = [newBias; p.c{nn}(3)]; end  %#ok
+            dsBatchBiasCov.par.c{nn} = newBias;
+            pb.print(nn/40);
+        end
+        pb.finish;
+        dsBatchBiasCov.parameterLearningEM(outerEMopts);
+    end
+    dsBatchBiasCov.save('learnedIvdlBias11');
+   
+    
+   %% 
+   dsBatchBiasOld = dsBatchBiasCov.copy; dsBatchBiasOld.useSavedParameters('learnedIvdlBias');
+for nn = 1:40
+    ds.plot.predictions(dsBatchBiasOld, [1,10,20,Inf], pump.target, 'nn', nn, 'titlePrefix', sprintf('Patient %d',nn), 'verbose', false, 'figure', figh1); 
+    ds.plot.predictions(dsBatchBiasCov, [1,10,20,Inf], pump.target, 'nn', nn, 'titlePrefix', sprintf('Patient %d',nn), 'verbose', false, 'figure', figh2);
     pause
 end

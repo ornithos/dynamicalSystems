@@ -64,6 +64,15 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
     nKnot = sum(opts.etaMask);
     assert(isnumeric(x) && numel(x) == dy*nKnot + dy*(dx+1), 'parameter vector is not the correct size');
 
+    if isa(obj, 'ds.dynamicalSystemBatch')
+        dsObjects = cell(obj.d.n,1);
+        for nn = 1:obj.d.n; dsObjects{nn} = obj.extractSingle(nn, false); end
+        N = obj.d.n;
+    else
+        dsObjects = {obj};
+        N = 1;
+    end
+    
     %% Function body
     
     % save current parameters
@@ -81,43 +90,50 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
     
     % get function val and gradient
     if nargout > 1
-        [f, D] = ds.utilIONLDS.bsplineGradMono(obj, x, utpar, opts);
-        if ~fixBias2
-            d                = [D.eta(:); D.C(:); D.bias(:)];
-        else
-            d                = [D.eta(:); D.C(:); zeros(size(D.bias(:)))];
+        f = 0;
+        d = 0;
+        for nn = 1:N
+            [ff, D] = ds.utilIONLDS.bsplineGradMono(dsObjects{nn}, x, utpar, opts);
+            if ~fixBias2
+                d                = [D.eta(:); D.C(:); D.bias(:)];
+            else
+                d                = [D.eta(:); D.C(:); zeros(size(D.bias(:)))];
+            end
+
+            % (ie do not optimise spline coefficients)
+            if ~bfgsSpline
+                d(1:nKnot*dy)    = 0;
+            end
+    %         
+    %         violateUB        = bsxfun(@gt, obj.par.emiNLParams.eta(:,opts.etaMask), etaUB);   % <-- this is nonsense since obj pars changed *INSIDE* grad fn now...
+    %         violateUB        = [violateUB(:); false(dy*(dx+1),1)] & d > 0;
+    %         if any(any(violateUB))
+    %            d(violateUB)     = 0;
+    %         end
+
+            % maximisation ----> minimisation
+            f                 = f - ff;
+            d                 = d - dd;  % see below (negation)
         end
-        
-        % (ie do not optimise spline coefficients)
-        if ~bfgsSpline
-            d(1:nKnot*dy)    = 0;
-        end
-%         
-%         violateUB        = bsxfun(@gt, obj.par.emiNLParams.eta(:,opts.etaMask), etaUB);   % <-- this is nonsense since obj pars changed *INSIDE* grad fn now...
-%         violateUB        = [violateUB(:); false(dy*(dx+1),1)] & d > 0;
-%         if any(any(violateUB))
-%            d(violateUB)     = 0;
-%         end
-        
-        % maximisation ----> minimisation
-        f                = -f;
-        d                = -d;  % see below (negation)
     else
         opts.gradient    = false;
-        %f                = ds.utilIONLDS.bsplineGradMono(obj, x, utpar, opts);
-    eta   = obj.par.emiNLParams.eta;
-    C     = obj.par.emiNLParams.C;
-    bias  = obj.par.emiNLParams.bias;
-    ds.utilIONLDS.updateParams_bspl(obj, x, opts.etaMask, 'logSpace', opts.gradientU);
-    
-        f                = expLogJoint_bspl(obj);
-        % maximisation ----> minimisation
-        f                = -f;
-%         [~,M2] = ds.utilIONLDS.utTransform_ymHx_bspl(obj);
-%         f = -0.5*trace(inv(obj.par.R)*M2);
-    obj.par.emiNLParams.eta  = eta;
-    obj.par.emiNLParams.C    = C;
-    obj.par.emiNLParams.bias = bias;
+        f               = 0;
+        for nn = 1:N
+            ff                = ds.utilIONLDS.bsplineGradMono(obj, x, utpar, opts);
+    %         eta   = obj.par.emiNLParams.eta;
+    %         C     = obj.par.emiNLParams.C;
+    %         bias  = obj.par.emiNLParams.bias;
+    %         ds.utilIONLDS.updateParams_bspl(obj, x, opts.etaMask, 'logSpace', opts.gradientU);
+
+    %         ff                = expLogJoint_bspl(obj);
+            % maximisation ----> minimisation
+            f                = f - ff;
+    %         [~,M2] = ds.utilIONLDS.utTransform_ymHx_bspl(obj);
+    %         ff = -0.5*trace(inv(obj.par.R)*M2);
+    %     obj.par.emiNLParams.eta  = eta;
+    %     obj.par.emiNLParams.C    = C;
+    %     obj.par.emiNLParams.bias = bias;
+        end
     end
     
     % reset object parameters (is a handle object)
