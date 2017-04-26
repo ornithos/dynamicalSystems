@@ -14,6 +14,10 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
     % cell containing multiple copies of time series with assumed same
     % parameters.
     
+    properties (Access = protected)
+        sglObj = []
+    end
+    
     properties (Dependent)
         ambientDimension
     end
@@ -219,6 +223,50 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
         function set.ambientDimension(obj, val)   %#ok
             % do nothing! Critical for on copy properties.
         end
+        
+        function dsObj = extractSingle(obj, nn, doInfer)
+            assert(utils.is.scalarint(nn,1) && nn <= obj.d.n, 'nn is not scalar int in 1, .., N');
+            if nargin < 3 || isempty(doInfer); doInfer = true; end
+            
+            % construct prototype object if not exist yet
+            if isempty(obj.sglObj)
+                opts       = struct('warnings', false, 'verbose', false);
+                if isa(obj, 'ds.ionlds')
+                    obj.sglObj = ds.ionlds(obj.d.x, obj.d.y, 'x0', obj.par.x0.mu{1}, ...
+                        obj.par.x0.sigma{1}, 'evolution', eye(obj.d.x), eye(obj.d.x), 'emission', ...
+                        ones(obj.d.y, obj.d.x), eye(obj.d.y), 'data', obj.y{1}, 'control', obj.u{1}, false, false, opts);
+                elseif isa(obj, 'ds.dynamicalSystem')
+                    obj.sglObj = ds.dynamicalSystem(obj.d.x, obj.d.y, 'x0', obj.par.x0.mu{1}, ...
+                        obj.par.x0.sigma{1}, 'evolution', eye(obj.d.x), eye(obj.d.x), 'emission', ...
+                        ones(obj.d.y, obj.d.x), eye(obj.d.y), 'data', obj.y{1}, 'control', obj.u{1}, false, false, opts);
+                end
+                for i = obj.sglObj.stackptr:-1:1; obj.sglObj.delete(i); end
+            end
+
+            % Copy all properties across: move from batch --> single by
+            % extracting nn'th element from each cell (except stack and
+            % xxxx) which are not applicable in this case).
+            p      = properties(obj.sglObj);
+            dsObj  = obj.sglObj.copy;
+            % valid while properties of dsBatch are a superset of ds:
+            for i = 1:length(p)
+                if ismember(p{i}, {'stack'}); continue; end   % infer
+                val          = obj.(p{i});
+                if isstruct(val)
+                    dsObj.(p{i}) = ds.dynamicalSystemBatch.copyStructNoCellRecursive(dsObj.(p{i}), val, nn);
+                else
+                    if iscell(val); val = val{nn}; end
+                    dsObj.(p{i}) = val;
+                end
+            end
+            
+            % unfortunately, obj.d.T is a *MATRIX* for batch, and scalar ow
+            dsObj.d.T = obj.d.T(nn);
+            
+            if doInfer
+                dsObj.smooth(dsObj.infer.fType, [], 'forceFilter', true);
+            end
+        end
 %         
 %         function out = n(obj)
 %             out = numel(obj.dsArray);
@@ -280,9 +328,9 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
 
     end
 
-   methods (Access = public, Hidden=true)
-       parameterLearningMStep(obj, updateOnly, opts); % internals for EM
-   end
+    methods (Access = public, Hidden=true)
+        parameterLearningMStep(obj, updateOnly, opts); % internals for EM
+    end
    
     methods (Access = protected)
                % ---- Dynamics wrappers --------------------------
@@ -327,5 +375,29 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             end
         end
         % ------------------------------------------------
+    end
+    
+    methods (Static)
+        function s1 = copyStructNoCellRecursive(s1, s2, nn)
+            % copies struct s2 into s1, traversing struct as a tree.
+            % --> the nn'th value is taken from all cells at all levels of
+            % the struct.
+            %
+            % ASSUMES ALL FIELDS WITHIN STRUCT s1 ARE AVAILABLE IN s2.
+            % (NO CHECKS - WILL BREAK OW.)
+            
+            fdss1 = fieldnames(s1);
+            for ii = 1:numel(fdss1)
+                f   = fdss1{ii};
+                val = s2.(f);
+                if isstruct(val)
+                    s1.(f) = ds.dynamicalSystemBatch.copyStructNoCellRecursive(s1.(f), val, nn);
+                    continue
+                elseif iscell(val)
+                    val = val{nn}; 
+                end
+                s1.(f) = val;
+            end
+        end
     end
 end
