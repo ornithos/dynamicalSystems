@@ -98,7 +98,7 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             end
         end
 
-        function fitted = getPredictedValues(obj, nlookahead, utpar)
+        function fitted = getPredictedValues(obj, nlookahead, utpar, nRng)
             if nargin < 2; nlookahead = 0; end
             obj.ensureInference('PREDVALS', 'filter');
         
@@ -113,8 +113,10 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             %if ~obj.emiLinear; [~,~,h,Dh]     = obj.functionInterfaces; nlpars.f = h; nlpars.Df = Dh; end
             doLinOrEKF  = nargin < 3 || isempty(utpar);
             
-            fitted = cell(obj.d.n, 1);
-            for nn = 1:obj.d.n
+            if nargin < 4 || isempty(nRng); nRng = 1:obj.d.n; end
+            fitted = cell(obj.d.n, 1);   % removes unnecessary at end.
+            
+            for nn = nRng
                 cFit      = zeros(obj.d.y, obj.d.T(nn) - nlookahead);
                 for tt = 1:obj.d.T(nn) - nlookahead
                     x_t = obj.infer.filter.mu{nn}(:,tt);
@@ -203,6 +205,7 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
                         smooth(obj, sType, utpar, varargin)
         s             = suffStats(obj, varargin);
         [y, covY]     = impute_y(obj, varargin);
+        
         % ***********************************************************
         % --> NEED TO IMPLEMENT PARAMETERLEARNINGMSTEP (INCL x0!!) FOR BTCH
         % ***********************************************************
@@ -276,7 +279,11 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
 %         end
 
     end
-    
+
+   methods (Access = public, Hidden=true)
+       parameterLearningMStep(obj, updateOnly, opts); % internals for EM
+   end
+   
     methods (Access = protected)
                % ---- Dynamics wrappers --------------------------
 %         function out = doTransition(obj, input, u)
@@ -292,14 +299,18 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
 %         end
         
         function out = doEmission(obj, input, u, P, utpar, nn)
-            b       = zeros(obj.d.y, 1);
+            
+            % get bias (may be null, vector, or cell)
             if ~isempty(obj.par.c)
                 if iscell(obj.par.c) && nargin == 6 && ~isempty(nn)
                     b = obj.par.c{nn}; 
                 else
                     b = obj.par.c;
                 end
+            else
+                b  = zeros(obj.d.y, 1);
             end
+            
             if obj.emiLinear
                  out = obj.par.H * input + b;
                  if obj.hasControl(2); out = out + obj.par.C * u; end

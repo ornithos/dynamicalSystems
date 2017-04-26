@@ -65,6 +65,16 @@ for nn = 1:obj.d.n
         U = [zeros(obj.d.u, 1), obj.u{nn}];
     end
 
+    % deal with individual biases c: need calc w/in suffStats. 3 cases:
+    % (a) no bias, (b) single bias, (c) individual biases
+    if isempty(obj.par.c)
+        biasc = repmat({1}, 1, obj.d.n);
+    elseif isnumeric(obj.par.c)
+        biasc = repmat({obj.par.c}, 1, obj.d.n);
+    else
+        biasc = obj.par.c;
+    end
+    
     % mu    indexes from 0:T     (T+1 elements)
     % sigma indexes from 0:T     (T+1 elements)
     % G     indexes from 0:(T-1) (T   elements)
@@ -150,6 +160,11 @@ for nn = 1:obj.d.n
     s.emissions       = struct('Ymu',  sum(y(:,yActv), 2));
     s.emissions.Umu   = sum(U(:, yActvP1), 2);
     s.emissions.Xmu   = sum(mu(:, yActvP1), 2);
+    
+    s.emissions.YmucT = s.emissions.Ymu * biasc{nn}';
+    s.emissions.UmucT = s.emissions.Umu * biasc{nn}';
+    s.emissions.XmucT = s.emissions.Xmu * biasc{nn}';
+    s.emissions.ccT   = biasc{nn} * biasc{nn}' * Ty;
     s.emissions.XU    = (mu(:, yActvP1) * U(:, yActvP1)');
     s.emissions.YU    = (y(:, yActv) * U(:,yActvP1)'); 
     s.emissions.UU    = (U(:, yActv) * U(:,yActv)');    % only to T-1 (see graphical model)
@@ -191,9 +206,13 @@ s.D                 = s.D     * divTy;
 s.emissions.Ymu    = s.emissions.Ymu * divTy;
 s.emissions.Umu    = s.emissions.Umu * divTy;
 s.emissions.Xmu    = s.emissions.Xmu * divTy;
+s.emissions.YmucT  = s.emissions.YmucT * divTy;
+s.emissions.UmucT  = s.emissions.UmucT * divTy;
+s.emissions.XmucT  = s.emissions.XmucT * divTy;
+s.emissions.ccT    = s.emissions.ccT   * divTy;
+
 s.emissions.XU     = s.emissions.XU  * divTy;
 s.emissions.YU     = s.emissions.YU  * divTy;
 s.emissions.UU     = s.emissions.UU  * divTy;
 s.emissions.SIGMA  = s.emissions.SIGMA * divTy;
-
 end

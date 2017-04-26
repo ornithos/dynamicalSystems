@@ -55,3 +55,68 @@
     
     dsNaNCell{ii} = dsLDS.copy;
 
+    %% Use (covariate-based) individual biases in batch learning (NOT LEARNED!!)
+    
+    % tblDemog should be loaded into workspace from
+    % ionlds.dataprep.loadMLHCdata
+    covLkp    = tblDemog;
+    pxLkp     = ionlds.utils.getPatientLookup;
+    covLkp.ID = pxLkp(:,2);
+    covLkp    = sortrows(covLkp, 'ID');
+    covBiases = zeros(3,40);
+    
+    % expected BP for Iranian adults according to Hosseini et al. 2015
+    for nn = 1:40
+        pxCovs = covLkp(nn,:);
+        bp     = ionlds.utils.getBPGivenAgeWeightHeight(pxCovs.age, pxCovs.weight, pxCovs.height, pxCovs.gender{1});
+        covBiases(1:2,nn) = [bp.sys(1); bp.dia(1)];
+    end
+    
+    % appears to be significant difference in diastolic BP vs. empirical
+    % data --> dia is much lower, particularly given the elevated physiological
+    % state assumed in some patients.
+    covBiases(2,:) = covBiases(2,:) - (mean(covBiases(2,:)) - bias(2));
+    covBiases(3,:) = 95;
+    
+    dsBatchBiasCov       = dsBatch.copy;
+    dsBatchBiasCov.par.c = mat2cell(covBiases, 3, ones(1,40));
+    llhhist = dsBatchBiasCov.parameterLearningEM(opts);
+    
+%% Compare predictions
+batchTable = table;
+batchTable.orig_1  = ds.utils.getKstepSMSE(dsBatch, 1, 'average', true)';
+batchTable.orig_10 = ds.utils.getKstepSMSE(dsBatch, 10, 'average', true)';
+batchTable.orig_20 = ds.utils.getKstepSMSE(dsBatch, 20, 'average', true)';
+batchTable.orig_fr = ds.utils.getKstepSMSE(dsBatch, Inf, 'average', true)';
+batchTable.bias_1  = ds.utils.getKstepSMSE(dsBatchBiasCov, 1, 'average', true)';
+batchTable.bias_10 = ds.utils.getKstepSMSE(dsBatchBiasCov, 10, 'average', true)';
+batchTable.bias_20 = ds.utils.getKstepSMSE(dsBatchBiasCov, 20, 'average', true)';
+batchTable.bias_fr = ds.utils.getKstepSMSE(dsBatchBiasCov, Inf, 'average', true)';
+%%
+% These are better than in abProjectWork1-6 (e.g.) table, since we
+% normalise by 'allVar'. However, even using remVar, things are
+% considerably better for 10-step, and a little better for 20-step.
+
+normaliseFactor = 'allVar';
+% normaliseFactor = 'remVar';
+invdlTable = table;
+invdlTable.pred_1 = (1:40)'; invdlTable.pred_10 = (1:40)'; invdlTable.pred_20 = (1:40)'; invdlTable.pred_fr = (1:40)';
+for nn = 1:40
+    invdlTable.pred_1(nn) = ds.utils.getKstepSMSE(dsNaNCell{nn}, 1, 'standardize', normaliseFactor);
+    invdlTable.pred_10(nn) = ds.utils.getKstepSMSE(dsNaNCell{nn}, 10, 'standardize', normaliseFactor);
+    invdlTable.pred_20(nn) = ds.utils.getKstepSMSE(dsNaNCell{nn}, 20, 'standardize', normaliseFactor);
+    invdlTable.pred_fr(nn) = ds.utils.getKstepSMSE(dsNaNCell{nn}, Inf, 'standardize', normaliseFactor);
+end
+
+    %% Visualise difference between batch parameters, and those with individual biases.
+    % The individual bias SMSE is better, but also qualitatively very
+    % encouraging for use with nonlinearity. Nevertheless, one imagines
+    % emission parameters may be required to be very different.
+    figh1 = figure;
+    figh2 = figure;
+    
+for nn = 1:40
+    ds.plot.predictions(dsBatchBiasCov, [1,10,20,Inf], pump.target, 'nn', nn, 'titlePrefix', sprintf('Patient %d',nn), 'verbose', false, 'figure', figh1); 
+    ds.plot.predictions(dsBatch, [1,10,20,Inf], pump.target, 'nn', nn, 'titlePrefix', sprintf('Patient %d',nn), 'verbose', false, 'figure', figh2);
+    pause
+end

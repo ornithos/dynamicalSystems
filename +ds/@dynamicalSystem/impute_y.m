@@ -31,7 +31,8 @@ function [y, covY] = impute_y(obj, varargin)
     optsDefault.bIgnoreHash = false;   % do not check inference
     optsDefault.sample    = false;
     optsDefault.utpar     = struct('alpha', 1, 'beta', 0, 'kappa', 0);
-
+    optsDefault.nRng      = 0;         % unused: for conformity with batch.
+    
     opts                  = utils.base.processVarargin(varargin, optsDefault);
     if ~(opts.filter || opts.smooth)
         opts.smooth = true;             % default

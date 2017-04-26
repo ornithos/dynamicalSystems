@@ -47,7 +47,7 @@ litecols      = utils.plot.colortint(cols, 0.8);
 cols          = utils.plot.colortint(litecols, 1.4);
 pforward      = 150;
 
-for ii = 1:13
+for ii = 14:40
     fprintf('*********** Patient %d ******************* \n', ii);
     R      = 0.2;
     ss     = 4;

@@ -22,8 +22,9 @@ function [y, covY] = impute_y(obj, varargin)
     optsDefault.bIgnoreHash = false;   % do not check inference
     optsDefault.sample    = false;
     optsDefault.utpar     = struct('alpha', 1, 'beta', 0, 'kappa', 0);
-
+    optsDefault.nRng      = 1:obj.d.n;
     opts                  = utils.base.processVarargin(varargin, optsDefault);
+    
     if ~(opts.filter || opts.smooth)
         opts.smooth = true;             % default
     end
@@ -33,11 +34,10 @@ function [y, covY] = impute_y(obj, varargin)
     end
     assert(xor(opts.filter, opts.smooth), 'Both filter and smooth are selected. Please select just one!');
     
-    
     y    = cell(obj.d.n,1);
     covY = cell(obj.d.n,1);
     
-    for nn = 1:obj.d.n
+    for nn = opts.nRng
         y{nn}      = obj.y{nn};
         missing    = isnan(y{nn});
         anyMissing = any(missing, 1);
@@ -104,4 +104,5 @@ function [y, covY] = impute_y(obj, varargin)
             end
         end 
     end
+
 end

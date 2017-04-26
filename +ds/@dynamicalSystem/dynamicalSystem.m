@@ -166,7 +166,7 @@ classdef dynamicalSystem < handle
           end
       end
       
-      function fitted = getPredictedValues(obj, nlookahead, utpar)
+      function fitted = getPredictedValues(obj, nlookahead, utpar, nRng)      %#ok nRng unused; conformity with batch.
           if nargin < 2; nlookahead = 0; end
           obj.ensureInference('PREDVALS', 'filter');
           
