@@ -39,15 +39,15 @@ function fit(obj, pforward, horizOverlay)
       
       % data may be cell if dsBatch
       if isa(obj, 'ds.dynamicalSystemBatch')
-          Nmodels = obj.d.n;
+          nModels = obj.d.n;
           y       = obj.y;
       else
-          Nmodels = 1;
+          nModels = 1;
           impy = {impy}; impPy = {impPy}; futurY = {futurY}; y = {obj.y};
           horizOverlay = {horizOverlay};
       end
       
-      for nn = 1:Nmodels
+      for nn = 1:nModels
           for jj = 1:obj.d.y
     %               plot(obj.y(jj,:)', ':', 'Color', litecols(jj,:)); hold on;
               plot(impy{nn}(jj,:)', '-', 'Color', cols(jj,:)); hold on;
@@ -67,12 +67,12 @@ function fit(obj, pforward, horizOverlay)
               utils.plot.dataShadeVertical(1:(obj.d.T(nn)), horizOverlay{nn}, cmap, 'edgedetect', 'manual', 'edgemanual', 3);
           end
           
-          if nn < Nmodels
-              pause;
+          if nModels > 1
+              title(sprintf('Series %d', nn));
           end
           
-          if nModels > 1
-              title('Series %d', nn);
+          if nn < nModels
+              pause;
           end
       end
 end

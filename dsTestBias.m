@@ -47,7 +47,7 @@ litecols      = utils.plot.colortint(cols, 0.8);
 cols          = utils.plot.colortint(litecols, 1.4);
 pforward      = 150;
 
-for ii = 14:40
+for ii = 10:10
     fprintf('*********** Patient %d ******************* \n', ii);
     R      = 0.2;
     ss     = 4;
@@ -70,10 +70,10 @@ for ii = 14:40
         'data', yy, 'control', uu, true, false, opts);
     
     epsilon = 0.01;
-    opts = struct('maxiter', 1000, 'epsilon', 5e-4, 'sampleStability', 5, ...
+    opts = struct('maxiter', 2000, 'epsilon', 5e-4, 'sampleStability', 5, ...
            'multistep', 4, 'ssid', false, 'verbose', true, 'stableVerbose', false, ...
            'annealingSchedule', 0.1, 'annealingIter', 100, 'annealingMin', 1e-3, ...
-           'diagA', true, 'diagQ', false, 'diagAconstraints', [-1+epsilon, 1-epsilon], 'fixBias2', true, 'strictNegativeCheck', false);
+           'diagA', true, 'diagQ', false, 'diagAconstraints', [-1+epsilon, 1-epsilon], 'fixBias2', true, 'strictNegativeCheck', true);
     llhhist = dsLDS.parameterLearningEM(opts);
     dsLDS.filter([],true);
     dsLDS.smooth;
@@ -98,7 +98,7 @@ for ii = 14:40
     cmap           = flipud([1 0.86 0.91; 0.86 0.91 1]);
     utils.plot.dataShadeVertical(1:(dsLDS.d.T), pump.target{ii}', cmap, 'edgedetect', 'manual', 'edgemanual', 3);
     
-    dsNaNCell{ii} = dsLDS.copy;
+    %dsNaNCell{ii} = dsLDS.copy;
 end
 
 

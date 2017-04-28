@@ -33,7 +33,8 @@ if ~opts.bIgnoreHash && obj.parametersChanged
 end
 if isempty(obj.infer.sType)
     if opts.verbose; fprintf('Smoother not run for current params. Running smoother...\n'); end
-    obj.smooth('Linear', [], opts);
+    sType = obj.infer.sType; if isempty(sType); sType = 'Linear'; end
+    obj.smooth(sType, [], opts);
 end
 
 sBatch = struct;
@@ -151,6 +152,10 @@ for nn = 1:obj.d.n
         s.XU      = (s.Xm1Um1 + mu(:,T+1) * U(:,T+1)')./(1);  
     end
 
+    s.Xmu      = mean(mu(:,2:T+1), 2);
+    s.Xmu_m1   = mean(mu(:,1:T),   2);
+    s.Umu      = mean(U(:,2:T+1),  2);
+
     if opts.infer
         error('no longer collect inferred parameters usefully in Batch. Needs work.');
         s.infer = struct('mu', mu); s.infer.P = sigma; s.infer.G = G;   % hack to stop MATLAB making a struct array
@@ -197,6 +202,10 @@ if any(obj.hasControl)
     s.UU        = s.UU    * divT;
     s.XU        = s.XU    * divT;
 end
+
+s.Xmu       = s.Xmu * divT;
+s.Xmu_m1    = s.Xmu_m1 * divT;
+s.Umu       = s.Umu * divT;
 
 divTy              = 1./s.emissions.Ty;
 

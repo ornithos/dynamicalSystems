@@ -9,22 +9,22 @@ function [f, grad, more] = bsplineGradMonoBatch(obj, x, utpar, varargin)
     if nargout == 1
         f = 0;
         for nn = 1:N
-            f = f + bsplineGradMono(dsObjects{nn}, x, utpar, varargin{:});
+            f = f + ds.utilIONLDS.bsplineGradMono(dsObjects{nn}, x, utpar, varargin{:});
         end
     end
     if nargout > 1
         f = 0;
-        g = 0;
-        more = struct('v', 0, 'K', 0, 'Hx', 0);
+        g = struct('eta', 0, 'C', 0, 'bias', 0);
+        more = struct('v', 0, 'K', 0, 'Hx', 'N/A for batch => to save memory');
         for nn = 1:N
-            [ff, gg, mm] = bsplineGradMono(dsObjects{nn}, x, utpar, varargin{:});
+            [ff, gg, mm] = ds.utilIONLDS.bsplineGradMono(dsObjects{nn}, x, utpar, varargin{:});
             f = f + ff;
             g.eta   = g.eta + gg.eta;
             g.C     = g.C   + gg.C;
             g.bias  = g.bias+ gg.bias;
             more.v  = more.v + mm.v;
             more.K  = more.K + mm.K;
-            more.Hx = more.Hx + mm.Hx;
+%             more.Hx = more.Hx + mm.Hx;
         end
         grad = g;
     end

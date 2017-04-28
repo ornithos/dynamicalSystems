@@ -52,22 +52,24 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
     emiParams = obj.par.emiNLParams;
     
     %% Calculations
-    
-    % SIGMA POINTS
-    [W, spts]    = getSigmaPtStuff(obj, alpha, beta, kappa);
-    
-    % pre-calculations (+ missing vals)
     y          = obj.y;
     ymiss      = isnan(y);
+    T          = find(~all(ymiss), 1, 'last');
+    
+    % SIGMA POINTS
+    [W, spts]    = getSigmaPtStuff(obj, alpha, beta, kappa, T);
+    
+    % pre-calcs (+ missing vals)
     y(ymiss)   = 0;                      % non-observed (whether partial or full) y's do not contribute!
+    y          = y(:,1:T);
     Rinv       = inv(obj.par.R);
-    RinvY      = Rinv*y;
+    RinvY      = Rinv*y(:,1:T);
     
     % pre-allocation
     v          = zeros(l*d, 1);
-    tmpK       = zeros(l*d, (2*n + 1)*obj.d.T);   % pretty big....
+    tmpK       = zeros(l*d, (2*n + 1)*T);   % pretty big....
     wc         = W.c;
-    Hx         = zeros(d, (2*n + 1)*obj.d.T);
+    Hx         = zeros(d, (2*n + 1)*T);
 
     % convert eta ---> theta (by differencing)
     theta      = zeros(d, l); 
@@ -79,7 +81,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
     %   ----------- (Major work of function) ----------------
     for dd = 1:d
         basis                    = emiParams.bspl.basisEval(spts.CXSP(dd,:));
-        basis(repelem(ymiss(dd,:), 1, 2*n+1),:) = 0;   % zero missing vals (because of R^-1, cannot just do in y_t).
+        basis(repelem(ymiss(dd,1:T), 1, 2*n+1),:) = 0;   % zero missing vals (because of R^-1, cannot just do in y_t).
         
         Hx(dd,:)                 = basis * emiParams.eta(dd,:)';
         
@@ -89,7 +91,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
         % calculated without this.)
         
         % basis is (2*n+1)*T   X   ell          dimension matrix
-        bw                       = bsxfun(@times, basisBack, repmat(wc, obj.d.T, 1));
+        bw                       = bsxfun(@times, basisBack, repmat(wc, T, 1));
         
         % fill in relevant dimension block in v
         v((dd-1)*l+1:dd*l)       = (repelem(RinvY(dd,:), 1, 2*n+1) * bw)';
@@ -97,7 +99,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
         % save basis elements for calculation of K (outer prod)
         tmpK((dd-1)*l+1:dd*l,:)  = basisBack';
     end
-    K            = bsxfun(@times, tmpK, repmat(wc', 1, obj.d.T)) * tmpK';    % sum w tmpK * tmpK'
+    K            = bsxfun(@times, tmpK, repmat(wc', 1, T)) * tmpK';    % sum w tmpK * tmpK'
     K            = K .* kron(Rinv, ones(l));
     
     %%
@@ -123,7 +125,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
     % function value
     yy           = 0;
     if doConstant || doSlow
-        for tt = 1:obj.d.T
+        for tt = 1:T
             yy = yy + y(:,tt)'*Rinv*y(:,tt);
         end
     end
@@ -137,7 +139,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
         Db           = derivativeBspline(spts.CXSP, emiParams.bspl, emiParams.eta);
         ymHx         = repelem(y, 1, nspts) - Hx;
         tmp          = Db .* (Rinv*ymHx);
-        wXSP         = bsxfun(@times, [spts.XSP; ones(1, nspts*obj.d.T)], repmat(wc', 1, obj.d.T));
+        wXSP         = bsxfun(@times, [spts.XSP; ones(1, nspts*T)], repmat(wc', 1, T));
 
         grad_Cb      = tmp * wXSP';
     end
@@ -154,7 +156,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
         % function val
         ff = 0;
         nspts = (2*n + 1);
-        for tt = 1:obj.d.T
+        for tt = 1:T
             curMiss = ymiss(:,tt);
             if true %~all(curMiss)
                 cRinv   = Rinv;
@@ -179,7 +181,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
         grad_eta = sgrad;
         
         sgrad_Cb     = 0;
-        for tt = 1:obj.d.T
+        for tt = 1:T
             for ii = 1:nspts
                 ix       = (tt-1)*nspts+ii;
                 delta    = y(:,tt) - Hx(:,ix);
@@ -235,7 +237,7 @@ function D = derivativeBspline(X, bspl, eta)
         end
 end
 
-function [W, sigm] = getSigmaPtStuff(obj, alpha, beta, kappa)
+function [W, sigm] = getSigmaPtStuff(obj, alpha, beta, kappa, T)
     % Get sigma points sigm.XSP,
     %     weights      W.m, W.c
     %     Cx + c       sigm.CXSP
@@ -255,8 +257,8 @@ function [W, sigm] = getSigmaPtStuff(obj, alpha, beta, kappa)
     
 
     % ________SIGMA POINTS X_{it}_______________________
-    XSP      = zeros(n, (2*n + 1)*obj.d.T);
-    for tt = 1:obj.d.T
+    XSP      = zeros(n, (2*n + 1)*T);
+    for tt = 1:T
         sigma    = obj.infer.smooth.sigma{tt};
         mu       = obj.infer.smooth.mu(:,tt);
         
@@ -292,6 +294,7 @@ function [W, sigm] = getSigmaPtStuff(obj, alpha, beta, kappa)
 end
 
 function [v,K] = slowGrad(obj, CXSP, w)
+    T     = find(~all(isnan(obj.y)), 1, 'last');
     bspl  = obj.par.emiNLParams.bspl;
     l     = numel(bspl.t)-2;
     nspts = 2*obj.d.x+1;

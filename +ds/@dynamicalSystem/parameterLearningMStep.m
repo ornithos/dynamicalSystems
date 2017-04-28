@@ -73,7 +73,7 @@ function parameterLearningMStep(obj, updateOnly, opts)
     fOpts = struct('bDoValidation', false, 'bIgnoreHash', true);
 
 %% Parameter updates
-    if opts.verbose; prevLLH = obj.logLikelihood('',[],fOpts); end
+    if opts.verbose; if ~isa(obj, 'ds.ionlds'); prevLLH = obj.logLikelihood('',[],fOpts); else; prevLLH = obj.expLogJoint_bspl('freeEnergy', true); end; end
     
     % ______________ A (And B) updates ___________________________________
     matchesAB = ismember({'A','B'}, updateOnly);
@@ -337,6 +337,10 @@ end
 
 
 function newLLH = dbgConsole(prevLLH, obj, label, fOpts) 
-    newLLH = obj.logLikelihood('',[],fOpts); 
+    if ~isa(obj, 'ds.ionlds')
+        newLLH = obj.logLikelihood('',[],fOpts); 
+    else
+        newLLH = obj.expLogJoint_bspl('freeEnergy', true);
+    end
     fprintf('M-Step: ''%s'' --- Change in LLH: %5.8f\n', strjoin(label, ''','''), newLLH - prevLLH);
 end

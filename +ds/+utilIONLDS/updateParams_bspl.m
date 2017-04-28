@@ -43,7 +43,7 @@ function prev = updateParams_bspl(obj, x, etaMask, varargin)
     
     % (In case user requests output)
     if nargout > 0
-        prev = getCurrParamVector(obj, etaMask, logSpace);
+        prev = ds.utilIONLDS.getCurrParamVector(obj, etaMask, logSpace);
     end
     
     % eta update
@@ -54,10 +54,3 @@ function prev = updateParams_bspl(obj, x, etaMask, varargin)
     obj.par.emiNLParams.bias  = reshape(x((dy*szEta+dy*dx+1):end), dy, 1);
 end
 
-function out =  getCurrParamVector(obj, etaMask, logSpace)
-    emiParams = obj.par.emiNLParams;
-    cEta      = emiParams.eta(:, etaMask);
-    cEta      = [cEta(:,1), diff(cEta(:,2:end), 1, 2)];
-    if logSpace; cEta = log(cEta); end
-    out       = [cEta(:); emiParams.C(:); emiParams.bias(:)];
-end

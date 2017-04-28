@@ -88,7 +88,8 @@ classdef dynamicalSystem < handle
          % CONSTRUCTOR
          obj.processInputArgs(varargin);
          
-         if numel(varargin) == 1 && isa(varargin{1}, 'ds.dynamicalSystem')
+         if numel(varargin) == 1 && (isa(varargin{1}, 'ds.dynamicalSystem') || ...
+             strcmp(varargin{1}, 'nullConstruct'))
              return
          end
          
@@ -166,13 +167,14 @@ classdef dynamicalSystem < handle
           end
       end
       
-      function fitted = getPredictedValues(obj, nlookahead, utpar, nRng)      %#ok nRng unused; conformity with batch.
+      function [fitted, X] = getPredictedValues(obj, nlookahead, utpar, nRng)      %#ok nRng unused; conformity with batch.
           if nargin < 2; nlookahead = 0; end
+          if nargin < 3; utpar = []; end
           obj.ensureInference('PREDVALS', 'filter');
           
           if isinf(nlookahead)
-              if nlookahead < 0; fitted = obj.getFittedValues; end
-              if nlookahead > 0; fitted = obj.getPredictFreeRun(1); end
+              if nlookahead < 0; fitted = obj.getFittedValues(utpar); end
+              if nlookahead > 0; [fitted, X] = obj.getPredictFreeRun(1, [], utpar); end
               return;
           end
           assert(nlookahead >= 0, 'lagged smoothing values not implemented. Try nlookahead=-Inf for Smoothed');
@@ -180,6 +182,7 @@ classdef dynamicalSystem < handle
           %if ~obj.emiLinear; [~,~,h,Dh]    = obj.functionInterfaces; nlpars.f = h; nlpars.Df = Dh; end
           doLinOrEKF = nargin < 3 || isempty(utpar);
           fitted     = zeros(obj.d.y, obj.d.T - nlookahead);
+          X          = zeros(obj.d.x, obj.d.T - nlookahead);
           
           for tt = 1:obj.d.T - nlookahead
               x_t = obj.infer.filter.mu(:,tt);
@@ -197,14 +200,15 @@ classdef dynamicalSystem < handle
               else
                 fitted(:,tt) = obj.doEmission(x_t, u_t, P, utpar);
               end
+              X(:,tt) = x_t;
           end
       end
       
-      function predict = getPredictFreeRun(obj, t, l, utpar)
+      function [predict, X] = getPredictFreeRun(obj, t, l, utpar)
           % predict from (time t), (l datapoints) forward
           if nargin < 2; t = 1; end
           assert(utils.is.scalarint(t) && t > 0 && t <= obj.d.T, 't must be a scalar int in 1,...,T');
-          if nargin < 3
+          if nargin < 3 || isempty(l)
               if t == obj.d.T; error('length of output l must be specified'); end
               l = obj.d.T - t; 
           end
@@ -215,6 +219,8 @@ classdef dynamicalSystem < handle
           if ~doLinOrEKF; P = obj.infer.filter.sigma{t+1}; end
           
           predict = NaN(obj.d.y, t+l);
+          X       = NaN(obj.d.x, t+1);
+          
           x_t = obj.infer.filter.mu(:, t);
           for tt = t+1:t+l
               if tt <= obj.d.T && any(obj.hasControl)
@@ -229,6 +235,7 @@ classdef dynamicalSystem < handle
               else
                 predict(:,tt) = obj.doEmission(x_t, u_t, P, utpar);
               end
+              X(:,tt) = x_t;
           end
       end
       
@@ -553,6 +560,7 @@ classdef dynamicalSystem < handle
                 if nargin == 5 && ~isempty(utpar)
                     nlpars.f = h;
                     nlpars.Q = 0;
+                    if ~obj.hasControl(2); u = []; end
                     out   = ds.utils.assumedDensityTform(nlpars, input, P, u, 2, utpar);
                 else
                     if ~obj.hasControl(2); out   = h(input);

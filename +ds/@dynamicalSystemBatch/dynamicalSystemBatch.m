@@ -14,7 +14,7 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
     % cell containing multiple copies of time series with assumed same
     % parameters.
     
-    properties (Access = protected)
+    properties (Hidden = true)
         sglObj = []
     end
     
@@ -102,7 +102,7 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             end
         end
 
-        function fitted = getPredictedValues(obj, nlookahead, utpar, nRng)
+        function [fitted, X] = getPredictedValues(obj, nlookahead, utpar, nRng)
             if nargin < 2; nlookahead = 0; end
             obj.ensureInference('PREDVALS', 'filter');
         
@@ -118,10 +118,12 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             doLinOrEKF  = nargin < 3 || isempty(utpar);
             
             if nargin < 4 || isempty(nRng); nRng = 1:obj.d.n; end
-            fitted = cell(obj.d.n, 1);   % removes unnecessary at end.
+            fitted     = cell(obj.d.n, 1); 
+            X          = cell(obj.d.n, 1);
             
             for nn = nRng
                 cFit      = zeros(obj.d.y, obj.d.T(nn) - nlookahead);
+                cX        = zeros(obj.d.x, obj.d.T - nlookahead);
                 for tt = 1:obj.d.T(nn) - nlookahead
                     x_t = obj.infer.filter.mu{nn}(:,tt);
                     u_t = [];
@@ -138,8 +140,10 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
                     else
                         cFit(:,tt) = obj.doEmission(x_t, u_t, P, utpar, nn);
                     end
+                    cX(:,tt) = x_t;
                 end
                 fitted{nn} = cFit;
+                X{nn}      = cX;
             end
         end
         
@@ -232,15 +236,20 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             if isempty(obj.sglObj)
                 opts       = struct('warnings', false, 'verbose', false);
                 if isa(obj, 'ds.ionlds')
+                    
+                    [~,~,h,~] = obj.functionInterfaces;
                     obj.sglObj = ds.ionlds(obj.d.x, obj.d.y, 'x0', obj.par.x0.mu{1}, ...
                         obj.par.x0.sigma{1}, 'evolution', eye(obj.d.x), eye(obj.d.x), 'emission', ...
-                        ones(obj.d.y, obj.d.x), eye(obj.d.y), 'data', obj.y{1}, 'control', obj.u{1}, false, false, opts);
+                        h, eye(obj.d.y), 'data', obj.y{1}, 'control', obj.u{1}, obj.par.B, false, opts);
+                    obj.sglObj.par.emiNLParams = obj.par.emiNLParams;
+                    
                 elseif isa(obj, 'ds.dynamicalSystem')
                     obj.sglObj = ds.dynamicalSystem(obj.d.x, obj.d.y, 'x0', obj.par.x0.mu{1}, ...
                         obj.par.x0.sigma{1}, 'evolution', eye(obj.d.x), eye(obj.d.x), 'emission', ...
                         ones(obj.d.y, obj.d.x), eye(obj.d.y), 'data', obj.y{1}, 'control', obj.u{1}, false, false, opts);
                 end
                 for i = obj.sglObj.stackptr:-1:1; obj.sglObj.delete(i); end
+                obj.sglObj.infer = ds.internal.emptyInferStruct;
             end
 
             % Copy all properties across: move from batch --> single by
@@ -252,7 +261,8 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             for i = 1:length(p)
                 if ismember(p{i}, {'stack'}); continue; end   % infer
                 val          = obj.(p{i});
-                if isstruct(val)
+                cur          = dsObj.(p{i});
+                if isstruct(cur)
                     dsObj.(p{i}) = ds.dynamicalSystemBatch.copyStructNoCellRecursive(dsObj.(p{i}), val, nn);
                 else
                     if iscell(val); val = val{nn}; end
@@ -385,6 +395,11 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             %
             % ASSUMES ALL FIELDS WITHIN STRUCT s1 ARE AVAILABLE IN s2.
             % (NO CHECKS - WILL BREAK OW.)
+            
+            if isempty(s1)
+                s1 = s2;
+                return
+            end
             
             fdss1 = fieldnames(s1);
             for ii = 1:numel(fdss1)

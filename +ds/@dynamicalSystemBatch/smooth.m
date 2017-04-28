@@ -39,7 +39,7 @@ function smooth(obj, sType, utpar, varargin)
     
     optsDefault  = struct('bDoValidation', true, 'bIgnoreHash', false, 'forceFilter', false, 'doLlh', false);
     opts         = utils.base.processVarargin(varargin, optsDefault);
-    utparDefault = struct('alpha', 1e-3, 'beta', 2, 'kappa', 0);
+    utparDefault = struct('alpha', 1, 'beta', 0, 'kappa', 0);
     utpar        = utils.struct.structCoalesce(utpar, utparDefault);
     
     if opts.bDoValidation

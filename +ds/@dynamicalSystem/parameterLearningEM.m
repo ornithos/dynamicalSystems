@@ -142,7 +142,7 @@ for ii = 1:opts.maxiter
     % --- Deterministic annealing artificially reflates the variance so no
     %     guarantees if beta < 1.
     if opts.strictNegativeCheck
-        negativeLlhStep = dbgLLH.R(1) < -1e-8 || dbgLLH.Q(1) < -1e-8 || dbgLLH.A(1) < -1e-8 || dbgLLH.H(1) < 1e-8;
+        negativeLlhStep = dbgLLH.R(1) < -1e-8 || dbgLLH.Q(1) < -1e-8 || dbgLLH.A(1) < -1e-8 || dbgLLH.H(1) < -1e-8;
     else
         negativeLlhStep = delta < -1e-8 && true && ~(prevStepWasConstrained && ~(opts.sampleStability == 1));
         %negativeLlhStep = delta < -1e-8 && da.cur == 1 && ~(prevStepWasConstrained && ~(opts.sampleStability == 1));

@@ -10,8 +10,11 @@ optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL'
                         'annealingMin', 1e-6, 'strictNegativeCheck', false, ...
                         'filterType', 'linear', 'utpar', struct, 'fixX0', true, ...
                         'nonlinOptimOpts', struct);
-optsDefault     = utils.base.parse_argumentlist(obj.opts, optsDefault, false);      % bring in global opts
-opts            = utils.base.parse_argumentlist(opts, optsDefault, false);          % add user specified opts.
+mstepDefault    = struct('fixA', false, 'fixB', false, 'fixQ', false, 'fixH', false, ...
+                        'fixD', false, 'fixR', false);
+optsDefault     = utils.struct.structCoalesce(optsDefault, mstepDefault, false);    % bring in mstep opts
+optsDefault     = utils.struct.structCoalesce(obj.opts, optsDefault, false);        % bring in global opts
+opts            = utils.base.parse_argumentlist(opts, optsDefault, true);          % add user specified opts.
 
 sing_val_eps    = 0.004999999999;  % tolerance of singular values of A > 1. This value
                                    % is given in in Sidiqqi et als code for constraint
@@ -37,12 +40,12 @@ if opts.ssid
 %         obj.smooth;
 %     end
 else
-    var_y   = var(obj.y);
+%     var_y   = var(obj.y);
     if isempty(obj.par.A)
         obj.par.A = eye(obj.d.x);
     end
     if isempty(obj.par.Q)
-        obj.par.Q = var_y*eye(obj.d.x)/10;
+        obj.par.Q = eye(obj.d.x)/10;
     end
     if isempty(obj.par.H)
         obj.par.H = eye(obj.d.x);
@@ -76,11 +79,13 @@ fOpts      = struct('bDoValidation', false, 'bIgnoreHash', true, 'forceFilter', 
 mstepOpts  = struct('verbose', opts.dbg, 'diagQ', opts.diagQ, 'diagR', opts.diagR, ...
                  'diagA', opts.diagA, 'diagAconstraints', opts.diagAconstraints, 'fixBias2', opts.fixBias2);
 optFds     = fieldnames(opts);
-for oname = optFds   % fixA, fixQ, fix....
-    if strcmp(oname(1:3), 'fix')
-        mstepOpts.(oname) = opts.(oname);
+for oname = optFds'   % fixA, fixQ, fix....
+    if strcmp(oname{1}(1:3), 'fix') && opts.(oname{1})
+        mstepOpts.(oname{1}) = opts.(oname{1});
     end
 end
+
+if isfield(mstepOpts, 'fixX0'); mstepOpts = rmfield(mstepOpts, 'fixX0'); end   % not handled in mstep.
 
 %% _________ Optimisation options ________________________________________
 
@@ -205,6 +210,8 @@ if opts.diagR; obj.par.R = diag(diag(obj.par.R)); end
 dbgLLH = struct('A',[0,0],'Q',[0,0],'H',[0,0],'R',[0,0],'x0',[0, -Inf]);
 bestpar    = cell(1,3);   bestpar{2} = -Inf;
 
+isBatch = isa(obj, 'ds.dynamicalSystemBatch');
+
 %% MAIN EM LOOP
 for ii = 1:opts.maxiter
     % E-Step!
@@ -223,7 +230,7 @@ for ii = 1:opts.maxiter
     % --- Deterministic annealing artificially reflates the variance so no
     %     guarantees if beta < 1.
     if opts.strictNegativeCheck
-        negativeLlhStep = dbgLLH.R(1) < -1e-8 || dbgLLH.Q(1) < -1e-8 || dbgLLH.A(1) < -1e-8 || dbgLLH.H(1) < 1e-8;
+        negativeLlhStep = dbgLLH.R(1) < -1e-8 || dbgLLH.Q(1) < -1e-8 || dbgLLH.A(1) < -1e-8 || dbgLLH.H(1) < -1e-8;
     else
         negativeLlhStep = delta < -1e-8 && true && ~(prevStepWasConstrained && ~(opts.sampleStability == 1));
         %negativeLlhStep = delta < -1e-8 && da.cur == 1 && ~(prevStepWasConstrained && ~(opts.sampleStability == 1));
@@ -233,7 +240,7 @@ for ii = 1:opts.maxiter
         iterBar.updateText([iterBar.text, '*']);
         if multiStep == 1
             % basically things have gone really wrong by here..
-%             iterBar.clearConsole;
+            iterBar.clearConsole;
 %             keyboard
         elseif opts.sampleStability > 1
             % only periodically sampling stability of A leads to jumps..
@@ -387,12 +394,17 @@ for ii = 1:opts.maxiter
 
     % if optimising spline outside of BFGS, solve small QP.
     if ~nonlinOpts.bfgsSpline && ~nonlinOpts.fixEta
-        obj.smooth(opts.filterType, opts.utpar, fOpts);
+        if ~nonlinOpts.fixC
+            obj.smooth(opts.filterType, opts.utpar, fOpts); 
+        else
+            emiOptOut  = ds.utilIONLDS.getCurrParamVector(obj, chgEtas, logSpace);
+        end
         qpopts                              = optimoptions('quadprog', 'Display', 'none');
-        eta0                                = exp(reshape(emiOptOut(1:nChgEtas*obj.d.y),obj.d.y,nChgEtas))';
-        [~,~,mm]                            = ds.utilIONLDS.bsplineGradMono(obj, emiOptOut, opts.utpar, 'etaMask', chgEtas);
-        if norm(mm.K-mm.K') > 1e-9
-            keyboard;
+        eta0                                = obj.par.emiNLParams.eta(:, chgEtas)';
+        if ~isBatch
+            [~,~,mm]                            = ds.utilIONLDS.bsplineGradMono(obj, emiOptOut, opts.utpar, 'etaMask', chgEtas);
+        else
+            [~,~,mm]                            = ds.utilIONLDS.bsplineGradMonoBatch(obj, emiOptOut, opts.utpar, 'etaMask', chgEtas);
         end
         mm.K                                = (mm.K+mm.K')./2;
         [eta,~,xfl]                         = quadprog(mm.K, -mm.v, nonlinOpts.A, nonlinOpts.b, [],[],...
@@ -431,19 +443,21 @@ for ii = 1:opts.maxiter
       
     %% Remaining parameters
     % ____ Canonical parameters: R ________________________________________
-    if opts.dbg; [F,~,q] = obj.expLogJoint; end
-    [~,M2]        = ds.utilIONLDS.utTransform_ymHx_bspl(obj);
+    if opts.dbg; [F,~,q] = obj.expLogJoint_bspl('freeEnergy', true); end
+    if ~isBatch
+        [~,M2]        = ds.utilIONLDS.utTransform_ymHx_bspl(obj);
+    else
+        [~,M2]        = ds.utilIONLDS.utTransform_ymHx_bspl_batch(obj);
+    end
     
-    % NOT SUPER HAPPY ABOUT THIS: SHOULD I REMOVE ALL COMPLETELY MISSING Ys
-    % FROM M2, and DIVIDE BY Ty?
-    obj.par.R     = M2 ./ obj.d.T;                     
+    obj.par.R     = M2 ./ sum(~all(isnan(obj.y)));
     if opts.diagR; obj.par.R = diag(diag(obj.par.R));  end
     if multiStep==1
         obj.smooth(opts.filterType, opts.utpar, fOpts);
         dbgLLH.R  = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh]; 
     end
     if opts.dbg
-        [F1,~,q1] = obj.expLogJoint;
+        [F1,~,q1] = obj.expLogJoint_bspl('freeEnergy', true);
         fprintf('M-Step: ''R'' --- Change in FreeNRG: %5.8f\n', F1 - F);
     end
     

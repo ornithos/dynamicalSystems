@@ -1,6 +1,19 @@
-function sigma = fullJointCovariance(obj)
+function sigma = fullJointCovariance(obj, T)
+ % sigma = fullJointCovariance(obj)
+ %
+ % Calculate the full posterior covariance matrix for a linear dynamical
+ % system. The 'joint' refers to the fact that it is not the marginal or
+ % pair-wise distributions usually dealt with, i.e. joint over all Xs.
+ % Note that this may be a *REALLY* bad idea if T is large!
+ %
+ % sigma = fullJointCovariance(obj, T)
+ %
+ % Calculate the partial posterior covariance (that is), up to time T.
+ %
 
-    T          = obj.d.T;
+    if nargin < 2 || isempty(T)
+        T = obj.d.T;
+    end
     d          = obj.d.x;
     N          = d*(T+1);   % because x0
     tts        = (1:d:N) + d;

@@ -21,6 +21,11 @@ function processInputArgs(obj, args)
               return
         end
         
+        % designated syntax for non-construction of superclass
+        if nargs == 1 && ischar(args{1}) && strcmp(args{1}, 'nullConstruct')
+            return
+        end
+        
         if nargs < 4
             error('Insufficient number of inputs. Need dim_x, dim_y, evolution, emission, data and x0');
         end

@@ -5,7 +5,12 @@ function smse = getKstepSMSE(obj, k, varargin)
     
     assert(ismember(opts.standardize, {'allVar', 'remVar'}), ['''standardize'' must be either ' ...
         ,'''allVar'' or ''remVar'', Current setting is %s'], opts.standardize)
-    predvals = obj.getPredictedValues(k);
+    
+    if ~(obj.evoLinear && obj.emiLinear)
+        predvals = obj.getPredictedValues(k);
+    else
+        predvals = obj.getPredictedValues(k, struct('alpha', 1, 'beta', 0, 'kappa', 0));
+    end
     
     % data may be cell if dsBatch
     if isa(obj, 'ds.dynamicalSystemBatch')

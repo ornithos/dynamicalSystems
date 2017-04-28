@@ -16,7 +16,7 @@ function predictions(obj, pwindows, horizOverlay, varargin)
       if nargin < 2 || isempty(pwindows)
           pwindows = 1;
       end
-      assert(all(arrayfun(@(x) utils.is.scalarint(x,1), pwindows)), 'pwindows must be positive scalar int (matrix)');
+      assert(all(arrayfun(@(x) utils.is.scalarint(x), pwindows)), 'pwindows must be positive scalar int (matrix)');
       if nargin < 3
           horizOverlay = [];
       else
@@ -62,7 +62,7 @@ function predictions(obj, pwindows, horizOverlay, varargin)
       
       if isBatch && opts.verbose; fprintf('\b\b\b, predicted values, ...'); end
       for jj = 1:nPreds
-          predvals{jj} = obj.getPredictedValues(pwindows(jj), [], opts.nn);
+          predvals{jj} = obj.getPredictedValues(pwindows(jj), struct('alpha',1,'beta', 0,'kappa', 0), opts.nn);
           if ~isBatch; predvals{jj} = {predvals{jj}}; end
       end
       if isBatch && opts.verbose; fprintf('\b\b\b\b\b. Done.\n'); end

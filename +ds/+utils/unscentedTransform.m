@@ -23,7 +23,7 @@ function [m, sigma, covxy] = unscentedTransform(fn, mu, sigma, alpha, beta, kapp
     % alpha  - scaling parameter (related to how clustered the sigma points
     %          are around the mean.) Suggest 10^-3
     % beta   - adjustment made for kurtosis of transformed distn. Suggest 2
-    % lambda - original scaling parameter of UT. Suggest (3 - dim(mu))
+    % kappa  - original scaling parameter of UT. Suggest (3 - dim(mu))
     %
     % OUTPUTS:
     % m      -  Mean of the closest transformed distribution according to

@@ -1,4 +1,4 @@
-classdef ionldsBatch < ds.dynamicalSystemBatch
+classdef ionldsBatch < ds.dynamicalSystemBatch & ds.ionlds
    % ionldsBatch: create input-output non-linear dynamical system object à
    % la (Georgatzis et al. 2016) inheriting from the general dynamicalSystem
    % class. This is the batch learning variant:
@@ -20,7 +20,9 @@ classdef ionldsBatch < ds.dynamicalSystemBatch
    methods
       function obj = ionldsBatch(varargin)
          % CONSTRUCTOR
-         obj@ds.dynamicalSystemBatch(varargin{:});  % do superclass constructor
+         obj@ds.dynamicalSystemBatch(varargin{:});  % do superclass constructor 
+         obj@ds.ionlds('nullConstruct');
+         
          assert(obj.evoLinear, 'transition model must be linear in IONLDS');
          assert(~obj.emiLinear, 'emissions must be non-linear in IONLDS');
          assert(obj.hasControl(1), 'transition model must include inputs in IONLDS');
@@ -36,12 +38,15 @@ classdef ionldsBatch < ds.dynamicalSystemBatch
           this.opts.warnings = curWarns;
       end
       
-      % modified superclass methods
-%       [a,D,q]            = expLogJoint(obj, varargin); % Q(theta, theta_n) / free energy less entropy
-%       [a,D,q]            = expLogJoint_bspl(obj, varargin); % Q(theta, theta_n) / free energy less entropy -- USES bspline nonlin
-%       D                  = getGradient(obj, par, doCheck) % get gradient of parameters
-%       [llh, niters]      = parameterLearningEM(obj, opts); % do learning
-%       [llh, niters]      = parameterLearningEM_bspl(obj, opts); % do learning for bspline version
+      % cannot initialise with ionlds superclass, so hacking the ionlds
+      % methods onto ionldsBatch:
+%       function [llh, niters]      = parameterLearningEM_bspl(obj, opts)
+%           [llh, niters] = parameterLearningEM_bspl@ds.ionlds(obj, opts);
+%       end
+%       function [llh, niters]      = expLogJoint_bspl(obj, opts)
+%           [llh, niters] = ds.ionlds.expLogJoint_bspl(obj, opts);
+%       end
+
    end
       
 end

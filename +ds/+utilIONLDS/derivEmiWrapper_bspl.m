@@ -45,7 +45,7 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
                     opts.etaMask = varargin{2};
                 case 'etaUB'
                     if ~isempty(varargin{2})
-                        assert(numel(varargin{2}) == size(obj.par.emiNLParams.eta,1), 'etaUB must have d dimensions');
+                        assert(numel(varargin{2}) == size(obj.par.emiNLParams.eta,1), 'etaUB must have d=%d dimensions',size(obj.par.emiNLParams.eta,1));
                         etaUB = varargin{2};
                     end
                 case 'bfgsSpline'
@@ -95,14 +95,9 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
         for nn = 1:N
             [ff, D] = ds.utilIONLDS.bsplineGradMono(dsObjects{nn}, x, utpar, opts);
             if ~fixBias2
-                d                = [D.eta(:); D.C(:); D.bias(:)];
+                dd                = [D.eta(:); D.C(:); D.bias(:)];
             else
-                d                = [D.eta(:); D.C(:); zeros(size(D.bias(:)))];
-            end
-
-            % (ie do not optimise spline coefficients)
-            if ~bfgsSpline
-                d(1:nKnot*dy)    = 0;
+                dd                = [D.eta(:); D.C(:); zeros(size(D.bias(:)))];
             end
     %         
     %         violateUB        = bsxfun(@gt, obj.par.emiNLParams.eta(:,opts.etaMask), etaUB);   % <-- this is nonsense since obj pars changed *INSIDE* grad fn now...
@@ -114,6 +109,11 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
             % maximisation ----> minimisation
             f                 = f - ff;
             d                 = d - dd;  % see below (negation)
+        end
+        
+        % (ie do not optimise spline coefficients)
+        if ~bfgsSpline
+            d(1:nKnot*dy)    = 0;
         end
     else
         opts.gradient    = false;
