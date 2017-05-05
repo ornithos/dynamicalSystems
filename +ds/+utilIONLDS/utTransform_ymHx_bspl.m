@@ -10,8 +10,9 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
     emiParams = obj.par.emiNLParams;
     assert(isfield(emiParams, 'C'), 'parameter C not found in emission parameters');
     if ~isfield(emiParams, 'bias'); emiParams.bias = []; end
-    assert(isnumeric(emiParams.eta) && all(size(emiParams.eta) == [d, 10]), ...
-        'emiParams.eta must be a matrix of size (d.y, 10)');
+    numEtaReqd = numel(emiParams.bspl.t) - 2;
+    assert(isnumeric(emiParams.eta) && all(size(emiParams.eta) == [d, numEtaReqd]), ...
+        'emiParams.eta must be a matrix of size (d.y, %d)', numEtaReqd);
     assert(isnumeric(emiParams.bias) && (isempty(emiParams.bias) || all(size(emiParams.bias) == [d, 1])), ...
         'emiParams.bias must be a matrix of size (d.y, 1)');
     
@@ -26,8 +27,8 @@ function [ymHx, outerprod, XSP, Wc] = utTransform_ymHx_bspl(obj, alpha, beta, ka
     end
     
     %% get sigma point stuff
-    anyNaN   = any(isnan(obj.y));
-    allNaN   = all(isnan(obj.y));
+    anyNaN   = any(isnan(obj.y), 1);
+    allNaN   = all(isnan(obj.y), 1);
     T        = find(~allNaN, 1, 'last');
     
     lambda   = alpha^2 * (n + kappa) - n;

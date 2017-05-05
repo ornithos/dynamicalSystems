@@ -19,7 +19,7 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
     end
     
     properties (Dependent)
-        ambientDimension
+        intrinsicDimension
     end
     
     methods
@@ -221,10 +221,10 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
         
         %% MISC FUNCTIONS
         
-        function value = get.ambientDimension(obj)
+        function value = get.intrinsicDimension(obj)
             value = cellfun(@(x) sum(~all(isnan(x),2)), obj.y);
         end
-        function set.ambientDimension(obj, val)   %#ok
+        function set.intrinsicDimension(obj, val)   %#ok
             % do nothing! Critical for on copy properties.
         end
         
@@ -340,10 +340,8 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
 
     methods (Access = public, Hidden=true)
         parameterLearningMStep(obj, updateOnly, opts); % internals for EM
-    end
-   
-    methods (Access = protected)
-               % ---- Dynamics wrappers --------------------------
+        
+        % ---- Dynamics wrappers --------------------------
 %         function out = doTransition(obj, input, u)
 %            
 %             if obj.evoLinear
@@ -385,6 +383,10 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             end
         end
         % ------------------------------------------------
+    end
+   
+    methods (Access = protected)
+
     end
     
     methods (Static)

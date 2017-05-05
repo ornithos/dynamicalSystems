@@ -6,8 +6,9 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
     emiParams = obj.par.emiNLParams;
     assert(isfield(emiParams, 'C'), 'parameter C not found in emission parameters');
     if ~isfield(emiParams, 'bias'); emiParams.bias = []; end
-    assert(isnumeric(emiParams.eta) && all(size(emiParams.eta) == [d, 10]), ...
-        'emiParams.eta must be a matrix of size (d.y, 10)');
+    numEtaReqd = numel(emiParams.bspl.t) - 2;
+    assert(isnumeric(emiParams.eta) && all(size(emiParams.eta) == [d, numEtaReqd]), ...
+        'emiParams.eta must be a matrix of size (d.y, %d)', numEtaReqd);
     assert(isnumeric(emiParams.bias) && (isempty(emiParams.bias) || all(size(emiParams.bias) == [d, 1])), ...
         'emiParams.bias must be a matrix of size (d.y, 1)');
     
@@ -54,7 +55,7 @@ function [f, grad, more] = bsplineGradMono(obj, x, utpar, varargin)
     %% Calculations
     y          = obj.y;
     ymiss      = isnan(y);
-    T          = find(~all(ymiss), 1, 'last');
+    T          = find(~all(ymiss,1), 1, 'last');
     
     % SIGMA POINTS
     [W, spts]    = getSigmaPtStuff(obj, alpha, beta, kappa, T);

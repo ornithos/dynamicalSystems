@@ -103,6 +103,7 @@ nonlinOpts.fixC             = false;
 nonlinOpts.fixEta           = false;
 nonlinOpts                  = utils.struct.structCoalesce(opts.nonlinOptimOpts, nonlinOpts);
 
+nonlinOpts.bfgsSpline       = nonlinOpts.bfgsSpline && ~nonlinOpts.fixEta;
 % ensure no bad combinations
 if strcmp(nonlinOpts.optimType, 'fmincon') && ~nonlinOpts.bfgsSpline
     error(['Bad option specification: request (optimType = fmincon, bfgsSpline = false). ', ...
@@ -154,6 +155,8 @@ optimEmi.objective = @(x) ds.utilIONLDS.derivEmiWrapper_bspl(obj, x, 'fixBias2',
 nonlinOpts.A       = kron(eye(obj.d.y), ones(1,sum(nonlinOpts.chgEtas)));
 nonlinOpts.b       = nonlinOpts.etaUB;
 if strcmp(nonlinOpts.optimType, 'fmincon')
+    assert(numel(nonlinOpts.etaUB) == obj.d.y, 'etaUB must have one element per output dimension. Use Inf if not present');
+    
     % need to interleave constraint A as optimised column-wise, not row-wise
     intleave               = [1:nChgEtas; (nChgEtas+1):(nChgEtas*2); (nChgEtas*2+1):(nChgEtas*3)];
     optimEmi.Aineq         = nonlinOpts.A(:, reshape(intleave(1:obj.d.y,:), 1, nChgEtas*obj.d.y));
@@ -443,22 +446,24 @@ for ii = 1:opts.maxiter
       
     %% Remaining parameters
     % ____ Canonical parameters: R ________________________________________
-    if opts.dbg; [F,~,q] = obj.expLogJoint_bspl('freeEnergy', true); end
-    if ~isBatch
-        [~,M2]        = ds.utilIONLDS.utTransform_ymHx_bspl(obj);
-    else
-        [~,M2]        = ds.utilIONLDS.utTransform_ymHx_bspl_batch(obj);
-    end
-    
-    obj.par.R     = M2 ./ sum(~all(isnan(obj.y)));
-    if opts.diagR; obj.par.R = diag(diag(obj.par.R));  end
-    if multiStep==1
-        obj.smooth(opts.filterType, opts.utpar, fOpts);
-        dbgLLH.R  = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh]; 
-    end
-    if opts.dbg
-        [F1,~,q1] = obj.expLogJoint_bspl('freeEnergy', true);
-        fprintf('M-Step: ''R'' --- Change in FreeNRG: %5.8f\n', F1 - F);
+    if ~opts.fixR
+        if opts.dbg; [F,~,q] = obj.expLogJoint_bspl('freeEnergy', true); end
+        if ~isBatch
+            [~,M2]        = ds.utilIONLDS.utTransform_ymHx_bspl(obj);
+        else
+            [~,M2]        = ds.utilIONLDS.utTransform_ymHx_bspl_batch(obj);
+        end
+
+        obj.par.R     = M2 ./ sum(~all(isnan(obj.y), 1));
+        if opts.diagR; obj.par.R = diag(diag(obj.par.R));  end
+        if multiStep==1
+            obj.smooth(opts.filterType, opts.utpar, fOpts);
+            dbgLLH.R  = [obj.infer.llh - dbgLLH.H(2), obj.infer.llh]; 
+        end
+        if opts.dbg
+            [F1,~,q1] = obj.expLogJoint_bspl('freeEnergy', true);
+            fprintf('M-Step: ''R'' --- Change in FreeNRG: %5.8f\n', F1 - F);
+        end
     end
     
     % M-step: x0
@@ -504,6 +509,7 @@ if ~converged && opts.verbose
         end
     end
         
+    fOpts.bIgnoreHash = false;
     obj.smooth(opts.filterType, opts.utpar, fOpts);
 end
 
