@@ -16,7 +16,7 @@ function smse = getKstepSMSE(obj, k, varargin)
     if isa(obj, 'ds.dynamicalSystemBatch')
         Nmodels = obj.d.n;
         y       = obj.y;
-%         d       = obj.ambientDimension;
+%         d       = obj.intrinsicDimension;
     else
         Nmodels = 1;
         predvals = {predvals}; y = {obj.y};

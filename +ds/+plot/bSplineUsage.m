@@ -4,6 +4,9 @@ function bSplineUsage(obj, predT, dim, varargin)
     assert(isnumeric(dim) && all(utils.is.int(dim, 1)) && all(dim <= obj.d.y), 'dim must be a vector of integers in 1, ..., %d', obj.d.y);
     
     optsDefault.showY  = false;
+    optsDefault.useX   = false;
+    optsDefault.showLines = false;
+    optsDefault.labelPts = false;
     opts               = utils.base.processVarargin(varargin, optsDefault);
     
     nPreds = numel(predT);
@@ -28,34 +31,83 @@ function bSplineUsage(obj, predT, dim, varargin)
     end
         
     spdims = utils.plot.subplotdims(nPreds);
-%     figure
-    for ii = 1:nDims
-        cDim = dim(ii);
-        for nn = 1:N
-            
-            xrng = cellfun(@(x) [min(x{nn}(cDim,:),[],2), max(x{nn}(cDim,:),[],2)], X, 'Un', 0);
-            xrng = cell2mat(xrng);
-            xrng = [min(xrng(:,1)), max(xrng(:,2))];
-            for jj = 1:nPreds
-%                 subplot(spdims(1), spdims(2), jj);
+    
+    figure;
+    
+    if nPreds > 1 || N > 1
+        % outer loop over dimensions
+        for ii = 1:nDims
+            cDim = dim(ii);
+            for nn = 1:N
+
+                % find min-max range over all prediction windows
+                xrng = cellfun(@(x) [min(x{nn}(cDim,:),[],2), max(x{nn}(cDim,:),[],2)], X, 'Un', 0);
+                xrng = cell2mat(xrng);
+                xrng = [min(xrng(:,1)), max(xrng(:,2))];
                 
-                fvals = xrng(1):.1:xrng(2);
-                plot(fvals, obj.par.emiNLParams.bspl.functionEval(fvals, obj.par.emiNLParams.eta(cDim,:)), 'k-');
-                hold on;
-                plot(X{jj}{nn}(cDim,:), predvals{jj}{nn}(cDim,:), '*'); 
-                if opts.showY
-                    yy = y{nn}(cDim,:);
-                    plot(X{jj}{nn}(cDim,:), yy(numel(yy)-size(X{jj}{nn},2)+1:end), 'ro');
+                for jj = 1:nPreds
+                    subplot(spdims(1), spdims(2), jj);
+
+                    fvals = xrng(1):.1:xrng(2);
+                    plot(fvals, obj.par.emiNLParams.bspl.functionEval(fvals, obj.par.emiNLParams.eta(cDim,:)), 'k-');
+                    hold on;
+                    plot(X{jj}{nn}(cDim,:), predvals{jj}{nn}(cDim,:), '*'); 
+                    if opts.labelPts
+                        text(X{jj}{nn}(cDim,:), predvals{jj}{nn}(cDim,:), cellstr(num2str((1:size(X{jj}{nn},2))')), 'VerticalAlignment', 'top'); 
+                    end
+                    if opts.showY
+                        yy = y{nn}(cDim,:);
+                        yy = yy(numel(yy)-size(X{jj}{nn},2)+1:end);
+                        plot(X{jj}{nn}(cDim,:), yy, 'ro');
+                        if opts.showLines
+                            line([X{jj}{nn}(cDim,:); X{jj}{nn}(cDim,:)], [yy; predvals{jj}{nn}(cDim,:)]);
+                        end
+                    end
+                    hold off
+                    xlim([xrng(1), xrng(2)]);
+                    titletxt = sprintf('Dimension %d, Prediction window: %d', cDim, predT(jj));
+                    if N > 1; titletxt = sprintf('SERIES %d --- %s', nn, titletxt); end
+                    title(titletxt);
                 end
-                hold off
-                xlim([xrng(1), xrng(2)]);
-                titletxt = sprintf('Dimension %d, Prediction window: %d', cDim, predT(jj));
-                if N > 1; titletxt = sprintf('SERIES %d --- %s', nn, titletxt); end
-                title(titletxt);
-            end
-            if nn < N || ii < nDims
-                pause
+                if nn < N || ii < nDims
+                    pause
+                end
             end
         end
+    else
+        % dimensions on same subplot
+        dimsOnSamePlot(obj, dim, X, predvals, predT, opts)
+    end 
+end
+
+function dimsOnSamePlot(obj, dim, x, predvals, predT, opts)
+    nDims  = numel(dim);
+    spdims = utils.plot.subplotdims(nDims);
+    
+    x      = x{1}{1};
+    if opts.useX; x = obj.par.emiNLParams.C * obj.x(:,2:end) + obj.par.emiNLParams.bias; end
+    predvals = predvals{1}{1};
+    
+    for ii = 1:nDims
+        subplot(spdims(1), spdims(2), ii);
+        cDim = dim(ii);
+        xrng = [min(x(cDim,:)), max(x(cDim,:))];
+        fvals = xrng(1):.1:xrng(2);
+        plot(fvals, obj.par.emiNLParams.bspl.functionEval(fvals, obj.par.emiNLParams.eta(cDim,:)), 'k-');
+        hold on;
+        plot(x(cDim,:), predvals(cDim,:), '*');
+        if opts.labelPts; text(x(cDim,:), predvals(cDim,:), cellstr(num2str((1:size(x,2))')), 'VerticalAlignment', 'top'); end
+        if opts.showY
+            yy = obj.y(cDim,:);
+            yy = yy(numel(yy)-size(x,2)+1:end);
+            plot(x(cDim,:), yy, 'ro');
+            if opts.showLines
+                line([x(cDim,:); x(cDim,:)], [yy; predvals(cDim,:)]);
+            end
+        end
+        hold off
+        xlim([xrng(1), xrng(2)]);
+        titletxt = sprintf('Dimension %d, Prediction window: %d', cDim, predT(1));
+        title(titletxt);
     end
 end

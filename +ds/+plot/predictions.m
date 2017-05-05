@@ -70,11 +70,11 @@ function predictions(obj, pwindows, horizOverlay, varargin)
       % data may be cell if dsBatch
       if isBatch
           y       = obj.y;
-          d       = obj.ambientDimension;
+          d       = obj.intrinsicDimension;
       else
           opts.nn = 1;
           impy = {impy}; impPy = {impPy}; y = {obj.y};
-          horizOverlay = {horizOverlay};
+          if ~isempty(horizOverlay); horizOverlay = {horizOverlay}; end
           d       = obj.d.y;
       end
       
@@ -98,12 +98,13 @@ function predictions(obj, pwindows, horizOverlay, varargin)
               ix       = (obj.d.T(nn) - size(predvals{jj}{nn},2)+1):obj.d.T(nn);
               smse     = nanmean((y{nn}(:,ix) - predvals{jj}{nn}).^2,2)./nanvar(y{nn}, [], 2);   % smse by channel (STNDD BY VAR(*all* Y))
               for kk = 1:d(nn)
-                  plot(ix, predvals{jj}{nn}(kk,:), '-', 'Color', cols(kk,:)); 
+                  plot(ix, predvals{jj}{nn}(kk,:), '-', 'Color', cols(kk,:), 'LineWidth', 1.3); 
               end
               hold off;
 
               if ~isempty(horizOverlay)
                   cmap           = flipud([1 0.86 0.91; 0.86 0.91 1]);
+                  cmap           = utils.plot.colortint(cmap, 0.6);
                   if size( horizOverlay{nn}, 2) == 1;  horizOverlay{nn} =  horizOverlay{nn}'; end
                   utils.plot.dataShadeVertical(1:(obj.d.T(nn)), horizOverlay{nn}, cmap, 'edgedetect', 'manual', 'edgemanual', 3);
               end
