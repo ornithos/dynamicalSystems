@@ -133,16 +133,17 @@ function processInputArgs(obj, args)
             end
         end
         
-        % data generation
-        if bGen
-            obj.generateData;
-        end
-        
         % do X0
         if ~isempty(xtrue)
             assert(all(size(xtrue) == [obj.d.x, obj.d.T]), 'x must be matrix %d x %d', ...
                     obj.d.x, obj.d.T);
             obj.x = xtrue;
+        end
+        
+                
+        % data generation
+        if bGen
+            obj.generateData;
         end
         
         % Check for known problems
@@ -271,8 +272,11 @@ function [obj,tests] = internalProcessEmi(obj, arg)
             obj.par.c = zeros(obj.d.y,1);
             arg(end) = []; nargs = nargs - 1;
         elseif all(size(arg{end})==[obj.d.y, 1])
-            obj.par.c = arg{end};
-            arg(end) = []; nargs = nargs -1;
+            % ensure this is the bias, not the cov matrix, when d = 1.
+            if obj.d.y > 1 || (nargs > 2 && isnumeric(arg{end-1}))
+                obj.par.c = arg{end};
+                arg(end) = []; nargs = nargs -1;
+            end
         end  
     end
     exhaustNum = false;

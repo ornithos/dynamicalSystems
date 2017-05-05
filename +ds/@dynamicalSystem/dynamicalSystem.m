@@ -120,12 +120,20 @@ classdef dynamicalSystem < handle
           xx(:,1)  = obj.par.x0.mu;
           yyHat    = zeros(obj.d.y, obj.d.T);
           
+          % xtrue given
+          if ~isempty(obj.x)
+              xx = [xx(:,1), obj.x];
+              doX = false;
+          else
+              doX = true;
+          end
+          
           transChol   = chol(obj.par.Q)';
           emissChol   = chol(obj.par.R)';
           for tt = 1:obj.d.T
               u_t = [];
               if any(obj.hasControl); u_t = obj.u(:,tt); end
-              xx(:,tt+1)    = obj.doTransition(xx(:,tt), u_t) + transChol * randn(obj.d.x,1);
+              if doX; xx(:,tt+1)    = obj.doTransition(xx(:,tt), u_t) + transChol * randn(obj.d.x,1); end
               yyHat(:,tt)   = obj.doEmission(xx(:,tt+1), u_t);
               yy(:,tt)      = yyHat(:,tt) + emissChol * randn(obj.d.y,1);
               
@@ -137,6 +145,7 @@ classdef dynamicalSystem < handle
               obj.x       = xx(:,2:end);
               obj.y       = yy;
               obj.yhat    = yyHat;
+              obj.infer.fpHash = [];
           end
       end
       
@@ -200,6 +209,7 @@ classdef dynamicalSystem < handle
               else
                 fitted(:,tt) = obj.doEmission(x_t, u_t, P, utpar);
               end
+              if fitted(:,tt) < 1e-6; end
               X(:,tt) = x_t;
           end
       end
@@ -428,6 +438,27 @@ classdef dynamicalSystem < handle
               obj.stack{pp,1}.yhat               = obj.stack{pp,1}.yhat(:,1:T);
           end
       end
+      
+      function rmNaNDimension(obj)
+          curd = obj.d.y;
+          newd = all(isnan(obj.y), 2);
+          assert(~any(diff(newd) > 1), 'NaN Dimension in middle of object. Not supported');    % sanity check. Not difficult to change this.
+          assert(obj.emiLinear, 'Removing dimensions from nonlinear emissions not supported'); % this is more difficult.
+          newd = sum(~newd);
+          
+          if curd == newd; return; end
+          
+          obj.d.y  = newd;
+          obj.y    = obj.y(1:newd,:);
+          if ~isempty(obj.yhat); obj.yhat = obj.yhat(1:newd,:); end
+          obj.par.H = obj.par.H(1:newd,:);
+          obj.par.R = obj.par.R(1:newd,1:newd);
+          if ~isempty(obj.par.C); obj.par.C = obj.par.C(1:newd,:); end  % control
+          if ~isempty(obj.par.c); obj.par.c = obj.par.c(1:newd,:); end  % bias
+          % --> DO NOT USE STACK HISTORY SINCE WILL NOT BE CONSONANT WITH
+          % NEW DIMENSION... :S
+      end
+      
       % --- prototypes -------------------
       % inference / learning 
       [a,q]         = expLogJoint(obj, varargin); % Q(theta, theta_n) / free energy less entropy
@@ -448,13 +479,53 @@ classdef dynamicalSystem < handle
       s             = suffStats(obj, opts);      % Sufficient statistics required for learning
       [y, covY]     = impute_y(obj, varargin);   % impute missing values into y ('filter'/'smooth', true);
       % graphical
-      plotStep2D(obj, posteriorType)
+      plotStep2D(obj, posteriorType);
+      
+      
+      function set_y(obj, val)   % not the official setter (N/A), since accesses property d => can cause initialisation probs.
+          assert(all(size(val) == [obj.d.y, obj.d.T]), 'value must be of size (%d, %d)', obj.d.y, obj.d.T);
+          obj.y = val;
+      end
    end
    
    methods (Access = public, Hidden=true)
+       
        parameterLearningMStep(obj, updateOnly, opts); % internals for EM
        ok  = validationInference(obj, doError); % Input validation
        out = parameterHash(obj);
+       
+       % ---- Dynamics wrappers --------------------------
+        function out = doTransition(obj, input, u)
+           
+            if obj.evoLinear
+                  out        = obj.par.A * input;
+                  if obj.hasControl(1); out = out + obj.par.B * u; end
+            else
+                [f,~,~,~]    = obj.functionInterfaces;
+                if ~obj.hasControl(1), out = f(input);
+                else, out = f(input, u); end
+            end
+        end
+        function out = doEmission(obj, input, u, P, utpar)
+            b       = zeros(obj.d.y, 1);
+            if ~isempty(obj.par.c); b = obj.par.c; end
+            if obj.emiLinear
+                 out = obj.par.H * input + b;
+                 if obj.hasControl(2); out = out + obj.par.C * u; end
+            else
+                [~,~,h,~]    = obj.functionInterfaces;
+                if nargin == 5 && ~isempty(utpar)
+                    nlpars.f = h;
+                    nlpars.Q = 0;
+                    if ~obj.hasControl(2); u = []; end
+                    out   = ds.utils.assumedDensityTform(nlpars, input, P, u, 2, utpar);
+                else
+                    if ~obj.hasControl(2); out   = h(input);
+                    else, out = h(input, u); end
+                end
+            end
+        end
+       % ------------------------------------------------
    end
    
    methods (Access = protected)
@@ -537,38 +608,7 @@ classdef dynamicalSystem < handle
       end
       % ------------------------------------------------
       
-       % ---- Dynamics wrappers --------------------------
-        function out = doTransition(obj, input, u)
-           
-            if obj.evoLinear
-                  out        = obj.par.A * input;
-                  if obj.hasControl(1); out = out + obj.par.B * u; end
-            else
-                [f,~,~,~]    = obj.functionInterfaces;
-                if ~obj.hasControl(1), out = f(input);
-                else, out = f(input, u); end
-            end
-        end
-        function out = doEmission(obj, input, u, P, utpar)
-            b       = zeros(obj.d.y, 1);
-            if ~isempty(obj.par.c); b = obj.par.c; end
-            if obj.emiLinear
-                 out = obj.par.H * input + b;
-                 if obj.hasControl(2); out = out + obj.par.C * u; end
-            else
-                [~,~,h,~]    = obj.functionInterfaces;
-                if nargin == 5 && ~isempty(utpar)
-                    nlpars.f = h;
-                    nlpars.Q = 0;
-                    if ~obj.hasControl(2); u = []; end
-                    out   = ds.utils.assumedDensityTform(nlpars, input, P, u, 2, utpar);
-                else
-                    if ~obj.hasControl(2); out   = h(input);
-                    else, out = h(input, u); end
-                end
-            end
-        end
-        % ------------------------------------------------
+
         
    end
    
