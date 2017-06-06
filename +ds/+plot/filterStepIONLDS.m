@@ -20,6 +20,7 @@ function filterStepIONLDS(obj, yDim, varargin)
     optsDefault.showPrincipalAxis = false;
     optsDefault.showNonlinearity  = false;
     optsDefault.fileName          = '';
+    optsDefault.startT            = 1;
     optsDefault.maxT              = obj.d.T;
     
     opts         = utils.base.processVarargin(varargin, optsDefault);
@@ -69,13 +70,13 @@ function filterStepIONLDS(obj, yDim, varargin)
         plot(xvals, yvals, '-', 'Color', [177,177,177]./255);
     end
     
-    for tt = 1:opts.maxT
+    for tt = opts.startT:opts.maxT
         title(sprintf('Iteration %d', tt));
         % one step ahead
         if obj.hasControl(1); u_t = obj.u(:,tt); end
         [m_minus, P_minus] = ds.utils.assumedDensityTform(parPredict, m, P, u_t, pType, utpar);
         
-        if tt > 1
+        if tt > opts.startT
             delete(pt2c);
             delete(pt2a); delete(pt2b);
             delete(pt2a2); delete(pt2b2);

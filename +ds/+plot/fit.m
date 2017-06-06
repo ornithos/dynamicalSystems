@@ -1,4 +1,4 @@
-function fit(obj, pforward, horizOverlay)
+function fit(obj, pforward, horizOverlay, varargin)
 % plot.fit(obj, pforward, horizOverlay)
 % plot fit of dynamicalSystem object
 %
@@ -19,19 +19,29 @@ function fit(obj, pforward, horizOverlay)
       else
           if iscell(horizOverlay)
               assert(all(cellfun(@numel, horizOverlay) == obj.d.T), 'horizOverlay wrong size for (some) time series');
-          else
+          elseif ~isempty(horizOverlay)
               assert(~isa(obj, 'ds.dynamicalSystemBatch'), 'dynamicalSystemBatch requires a cell input of horizOverlay');
               assert(numel(horizOverlay) == obj.d.T, 'horizOverlay wrong size for tinme series');
           end
       end
 
+      optsDefault.axis = [];
+      opts             = utils.base.processVarargin(varargin, optsDefault);
+      
       cols          = zeros(obj.d.y,3);
       cnums         = [2 4 5 3 6 7 1];
-      for kk = 1:obj.d.y; cols(kk,:) = utils.plot.varyColor2(cnums(kk)); end
+      for kk = 1:3; cols(kk,:) = utils.plot.varyColor2(cnums(kk)); end
       litecols      = utils.plot.colortint(cols, 0.8);
 
       %% Plot
-      figure
+      if isempty(opts.axis)
+        cF = figure;
+        ax = gca;
+      else
+        cF = get(opts.axis, 'Parent');  
+        ax = opts.axis;
+%         figure(cF);    % no need since hold has axis argument
+      end
       
       % get data
       [impy, impPy] = obj.impute_y('variance', true, 'smooth', true);
@@ -49,30 +59,33 @@ function fit(obj, pforward, horizOverlay)
       
       for nn = 1:nModels
           for jj = 1:obj.d.y
-    %               plot(obj.y(jj,:)', ':', 'Color', litecols(jj,:)); hold on;
-              plot(impy{nn}(jj,:)', '-', 'Color', cols(jj,:)); hold on;
-              plot(1:obj.d.T(nn)+pforward, futurY{nn}(jj,:), 'Color', litecols(jj,:));
+%               plot(ax, obj.y(jj,:)', '--', 'Color', 'k' ); hold(ax, 'on');  % litecols(jj,:)
+              plot(ax, impy{nn}(jj,:)', '-', 'Color', cols(jj,:)); hold(ax, 'on');
+              plot(ax, 1:obj.d.T(nn)+pforward, futurY{nn}(jj,:), 'Color', litecols(jj,:));
           end
-          hold off;
+          hold(ax, 'off');
           stdy          = sqrt(cell2mat(cellfun(@(x) diag(x)', impPy{nn}, 'Un', 0)))';
           for jj = 1:obj.d.y
               nanidx          = find(isnan(y{nn}(jj,:)));
               if isempty(nanidx); continue; end
               nanminmax       = nanidx(1):nanidx(end);
-              utils.plot.confidenceInterval(nanminmax, impy{nn}(jj,nanminmax), stdy(jj,nanminmax), [], 'facecolor', cols(jj,:));
+              utils.plot.confidenceInterval(nanminmax, impy{nn}(jj,nanminmax), stdy(jj,nanminmax), [], 'facecolor', cols(jj,:), 'axis', ax);
           end
-          if ~isempty(horizOverlay)
+          if ~isempty(horizOverlay{nn})
               cmap           = flipud([1 0.86 0.91; 0.86 0.91 1]);
               if size( horizOverlay{nn}, 2) == 1;  horizOverlay{nn} =  horizOverlay{nn}'; end
-              utils.plot.dataShadeVertical(1:(obj.d.T(nn)), horizOverlay{nn}, cmap, 'edgedetect', 'manual', 'edgemanual', 3);
+              utils.plot.dataShadeVertical(1:(obj.d.T(nn)), horizOverlay{nn}, cmap, 'edgedetect', 'manual', 'edgemanual', 3, 'axis', ax);
           end
           
           if nModels > 1
-              title(sprintf('Series %d', nn));
+              title(ax, sprintf('Series %d', nn));
           end
           
           if nn < nModels
               pause;
           end
       end
+      
+      % return to original on-top figure (if different)
+      figure(cF);
 end

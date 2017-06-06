@@ -123,7 +123,7 @@ classdef dynamicalSystemBatch < ds.dynamicalSystem
             
             for nn = nRng
                 cFit      = zeros(obj.d.y, obj.d.T(nn) - nlookahead);
-                cX        = zeros(obj.d.x, obj.d.T - nlookahead);
+                cX        = zeros(obj.d.x, obj.d.T(nn) - nlookahead);
                 for tt = 1:obj.d.T(nn) - nlookahead
                     x_t = obj.infer.filter.mu{nn}(:,tt);
                     u_t = [];

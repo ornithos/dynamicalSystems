@@ -176,7 +176,7 @@ classdef dynamicalSystem < handle
           end
       end
       
-      function [fitted, X] = getPredictedValues(obj, nlookahead, utpar, nRng)      %#ok nRng unused; conformity with batch.
+      function [fitted, X, Cov] = getPredictedValues(obj, nlookahead, utpar, nRng)      %#ok nRng unused; conformity with batch.
           if nargin < 2; nlookahead = 0; end
           if nargin < 3; utpar = []; end
           obj.ensureInference('PREDVALS', 'filter');
@@ -188,28 +188,41 @@ classdef dynamicalSystem < handle
           end
           assert(nlookahead >= 0, 'lagged smoothing values not implemented. Try nlookahead=-Inf for Smoothed');
           
+          if nargout > 2
+              saveCovariance = true;
+              Cov = cell(obj.d.T - nlookahead,1);
+          else
+              saveCovariance = false;
+          end
+          
           %if ~obj.emiLinear; [~,~,h,Dh]    = obj.functionInterfaces; nlpars.f = h; nlpars.Df = Dh; end
-          doLinOrEKF = nargin < 3 || isempty(utpar);
+          fType      = ds.utils.filterTypeLookup(obj.infer.fType, true) -1;
+          parsEmission = ds.internal.getParams(obj, 2, 2*(fType > 0));
+          doCov      = fType == 2 || saveCovariance;
+          
           fitted     = zeros(obj.d.y, obj.d.T - nlookahead);
           X          = zeros(obj.d.x, obj.d.T - nlookahead);
+          
           
           for tt = 1:obj.d.T - nlookahead
               x_t = obj.infer.filter.mu(:,tt);
               u_t = [];
               if any(obj.hasControl); u_t = obj.u(:,tt); end
-              if ~doLinOrEKF; P = obj.infer.filter.sigma{tt}; end
+              if doCov; P = obj.infer.filter.sigma{tt}; end
               for jj = 1:nlookahead
                   x_t = obj.doTransition(x_t, u_t);
                   u_t = [];
                   if any(obj.hasControl); u_t = obj.u(:,tt+jj); end
-                  if ~doLinOrEKF; P = obj.par.A*P*obj.par.A' + obj.par.Q; end
+                  if doCov; P = obj.par.A*P*obj.par.A' + obj.par.Q; end
               end
-              if doLinOrEKF
-                fitted(:,tt) = obj.doEmission(x_t, u_t);
+              if saveCovariance && ~(fType == 2 && isempty(utpar))   % last condition is only for back-compatibility with some old code. Suggest bin it.
+                  if ~obj.hasControl(2); u_t = []; end
+                  [fm, fP] = ds.utils.assumedDensityTform(parsEmission, x_t, P, [], 2, utpar);
+                  fitted(:,tt) = fm;
+                  if saveCovariance; Cov{tt} = fP; end
               else
-                fitted(:,tt) = obj.doEmission(x_t, u_t, P, utpar);
+                  fitted(:,tt) = obj.doEmission(x_t, u_t);
               end
-              if fitted(:,tt) < 1e-6; end
               X(:,tt) = x_t;
           end
       end
