@@ -25,8 +25,10 @@ function fit(obj, pforward, horizOverlay, varargin)
           end
       end
 
-      optsDefault.axis = [];
-      opts             = utils.base.processVarargin(varargin, optsDefault);
+      optsDefault.axis  = [];
+      optsDefault.yTrue = obj.y;
+      opts              = utils.base.processVarargin(varargin, optsDefault);
+      assert(all(size(opts.yTrue) == size(obj.y)), 'yTrue is non-conformable to y in dynamicalSystems object');
       
       cols          = zeros(obj.d.y,3);
       cnums         = [2 4 5 3 6 7 1];
@@ -59,18 +61,18 @@ function fit(obj, pforward, horizOverlay, varargin)
       
       for nn = 1:nModels
           for jj = 1:obj.d.y
-%               plot(ax, obj.y(jj,:)', '--', 'Color', 'k' ); hold(ax, 'on');  % litecols(jj,:)
-              plot(ax, impy{nn}(jj,:)', '-', 'Color', cols(jj,:)); hold(ax, 'on');
+              plot(ax, impy{nn}(jj,:)', ':', 'Color', litecols(jj,:)); hold(ax, 'on');
+              plot(ax, opts.yTrue(jj,:)', '-', 'Color', cols(jj,:)); hold(ax, 'on');  % litecols(jj,:)
               plot(ax, 1:obj.d.T(nn)+pforward, futurY{nn}(jj,:), 'Color', litecols(jj,:));
           end
           hold(ax, 'off');
           stdy          = sqrt(cell2mat(cellfun(@(x) diag(x)', impPy{nn}, 'Un', 0)))';
-          for jj = 1:obj.d.y
-              nanidx          = find(isnan(y{nn}(jj,:)));
-              if isempty(nanidx); continue; end
-              nanminmax       = nanidx(1):nanidx(end);
-              utils.plot.confidenceInterval(nanminmax, impy{nn}(jj,nanminmax), stdy(jj,nanminmax), [], 'facecolor', cols(jj,:), 'axis', ax);
-          end
+%           for jj = 1:obj.d.y
+%               nanidx          = find(isnan(y{nn}(jj,:)));
+%               if isempty(nanidx); continue; end
+%               nanminmax       = nanidx(1):nanidx(end);
+%               utils.plot.confidenceInterval(nanminmax, impy{nn}(jj,nanminmax), stdy(jj,nanminmax), [], 'facecolor', cols(jj,:), 'axis', ax);
+%           end
           if ~isempty(horizOverlay{nn})
               cmap           = flipud([1 0.86 0.91; 0.86 0.91 1]);
               if size( horizOverlay{nn}, 2) == 1;  horizOverlay{nn} =  horizOverlay{nn}'; end

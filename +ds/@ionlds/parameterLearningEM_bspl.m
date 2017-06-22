@@ -154,6 +154,10 @@ optimEmi.objective = @(x) ds.utilIONLDS.derivEmiWrapper_bspl(obj, x, 'fixBias2',
 % Setup constraints for spline coefficients
 nonlinOpts.A       = kron(eye(obj.d.y), ones(1,sum(nonlinOpts.chgEtas)));
 nonlinOpts.b       = nonlinOpts.etaUB;
+if isempty(nonlinOpts.b)
+    nonlinOpts.A = [];
+    warning('etaUB not given in nonlinOptimOptions: Spline coefficients are unconstrained..');
+end
 if strcmp(nonlinOpts.optimType, 'fmincon')
     assert(numel(nonlinOpts.etaUB) == obj.d.y, 'etaUB must have one element per output dimension. Use Inf if not present');
     

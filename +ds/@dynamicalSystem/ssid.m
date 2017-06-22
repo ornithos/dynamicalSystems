@@ -1,5 +1,5 @@
 function ssid(obj, L)
-    assert(sum(sum(isnan(obj.y))), 'SSID will fail with missing values at present');
+    assert(sum(sum(isnan(obj.y)))==0, 'SSID will fail with missing values at present');
     
     if ~any(obj.hasControl)
         % dimension of input vectors
