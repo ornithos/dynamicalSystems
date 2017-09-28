@@ -79,14 +79,14 @@ function [f, d] = derivEmiWrapper_bspl(obj, x, varargin)
 %     eta   = obj.par.emiNLParams.eta;
 %     C     = obj.par.emiNLParams.C;
 %     bias  = obj.par.emiNLParams.bias;
-%     
+%     ß
 %     % update parameters from input
 %     ds.utilIONLDS.updateParams_bspl(obj, x, opts.etaMask);
     
     % replace bias so as not to mess with finite difference (if checking)
-    if fixBias2
-        obj.par.emiNLParams.bias    = bias;
-    end
+%     if fixBias2
+%         obj.par.emiNLParams.bias    = bias;
+%     end
     
     % get function val and gradient
     if nargout > 1

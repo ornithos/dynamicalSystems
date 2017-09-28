@@ -61,13 +61,18 @@ function parameterLearningMStep(obj, updateOnly, opts)
     
     optsDefault = struct('verbose', true, 'diagQ', false, 'diagR', false, ...
                          'diagA', false, 'diagAconstraints', [-1,1], 'anneal', 1, ...
-                         'fixBias2', false);
+                         'fixBias2', false, 'priorQ', []);
     opts        = utils.base.parse_argumentlist(opts, optsDefault, true);
     
     % get all sufficient statistics
     s   = obj.suffStats(struct('bIgnoreHash', true, 'anneal', opts.anneal));
 
-    eps = 0;% 1e-8./obj.d.T;   % 'kind-of' prior to avoid instability in covariances.
+    eps = 0;% 1e-8./obj.d.T;   % avoid instability in covariances. Reqd at one stage of dev.
+    
+    if opts.priorQ
+        assert(isnumeric(opts.priorQ) && numel(opts.priorQ) == 2, 'prior Q must be size 2 vector');
+        assert(opts.priorQ(1) > obj.d.x -1, 'Q prior nu value must be greater than d-1');
+    end
     
     % opts to stop log likelihood doing unnecessary work
     fOpts = struct('bDoValidation', false, 'bIgnoreHash', true);
@@ -168,6 +173,9 @@ function parameterLearningMStep(obj, updateOnly, opts)
 
         % numerical imprecision (hopefully!) on symmetry 
         obj.par.Q   = (Q + Q')./2 + eps*eye(obj.d.x);
+        if opts.priorQ
+            obj.par.Q  = (obj.d.T*obj.par.Q + prod(opts.priorQ)*eye(obj.d.x))./(obj.d.T+obj.d.x+opts.priorQ(1)+1);
+        end
         
         if opts.diagQ
             obj.par.Q = diag(diag(obj.par.Q));

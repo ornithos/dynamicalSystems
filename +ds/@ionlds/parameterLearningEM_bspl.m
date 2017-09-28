@@ -11,7 +11,7 @@ optsDefault     = struct('epsilon', 1e-3, 'maxiter', 200, 'ssid', false, 'ssidL'
                         'filterType', 'linear', 'utpar', struct, 'fixX0', true, ...
                         'nonlinOptimOpts', struct);
 mstepDefault    = struct('fixA', false, 'fixB', false, 'fixQ', false, 'fixH', false, ...
-                        'fixD', false, 'fixR', false);
+                        'fixD', false, 'fixR', false, 'priorQ', []);
 optsDefault     = utils.struct.structCoalesce(optsDefault, mstepDefault, false);    % bring in mstep opts
 optsDefault     = utils.struct.structCoalesce(obj.opts, optsDefault, false);        % bring in global opts
 opts            = utils.base.parse_argumentlist(opts, optsDefault, true);          % add user specified opts.
@@ -77,7 +77,8 @@ da.curIter      = 0;
 % get options for Filtering and for M-step
 fOpts      = struct('bDoValidation', false, 'bIgnoreHash', true, 'forceFilter', true, 'doLlh', true);
 mstepOpts  = struct('verbose', opts.dbg, 'diagQ', opts.diagQ, 'diagR', opts.diagR, ...
-                 'diagA', opts.diagA, 'diagAconstraints', opts.diagAconstraints, 'fixBias2', opts.fixBias2);
+                 'diagA', opts.diagA, 'diagAconstraints', opts.diagAconstraints, ...
+                 'fixBias2', opts.fixBias2, 'priorQ', opts.priorQ);
 optFds     = fieldnames(opts);
 for oname = optFds'   % fixA, fixQ, fix....
     if strcmp(oname{1}(1:3), 'fix') && opts.(oname{1})
@@ -227,6 +228,7 @@ for ii = 1:opts.maxiter
     % llh calc
     dbgLLH.x0  = [obj.infer.llh - dbgLLH.R(2), obj.infer.llh];
     llh(ii+1) = obj.infer.llh;
+    if opts.priorQ; llh(ii+1)  = llh(ii+1) -0.5*(obj.d.x+1+opts.priorQ(1))*utils.math.logdet(obj.par.Q) -0.5*prod(opts.priorQ)*sum(1./eig(obj.par.Q)); end
     delta     = llh(ii+1) - llh(ii);
     
     % ============== Convergence and Admin ===============================
@@ -506,7 +508,7 @@ if ~converged && opts.verbose
     iterBar.finish;
     fprintf('EM did not converge in %d iterations\n', opts.maxiter);
     
-    if obj.logLikelihood < bestpar{2}
+    if true && obj.logLikelihood < bestpar{2}
         obj.par = bestpar{1};
         if opts.verbose
             fprintf('Best log likelihood found on iteration %d of %d\n', bestpar{3}, ii);
